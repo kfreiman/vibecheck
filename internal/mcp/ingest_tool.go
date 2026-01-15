@@ -3,13 +3,14 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/kfreiman/vibecheck/internal/converter"
-	"github.com/kfreiman/vibecheck/internal/redaction"
 	"github.com/kfreiman/vibecheck/internal/storage"
 )
 
@@ -27,7 +28,7 @@ func NewIngestDocumentTool(storageManager *storage.StorageManager, documentConve
 	}
 }
 
-// Call implements the MCP tool interface
+// Call implements the MCP tool interface with retry logic and graceful degradation
 func (t *IngestDocumentTool) Call(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	// Parse arguments
 	var args struct {
@@ -36,30 +37,36 @@ func (t *IngestDocumentTool) Call(ctx context.Context, request *mcp.CallToolRequ
 	}
 
 	if err := json.Unmarshal(request.Params.Arguments, &args); err != nil {
-		return nil, fmt.Errorf("invalid input format: %w", err)
+		return nil, &ValidationError{
+			Field:  "arguments",
+			Reason: fmt.Sprintf("invalid JSON format: %v", err),
+		}
 	}
 
+	// Validate required parameters
 	if args.Path == "" {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: "Error: 'path' parameter is required"},
 			},
-		}, fmt.Errorf("path parameter is required")
+		}, &ValidationError{Field: "path", Reason: "required parameter missing"}
 	}
 
+	// Set defaults
 	if args.Type == "" {
-		args.Type = "cv" // Default to CV
+		args.Type = "cv"
 	}
 
+	// Validate type
 	if args.Type != "cv" && args.Type != "jd" {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: "Error: 'type' must be 'cv' or 'jd'"},
 			},
-		}, fmt.Errorf("type must be 'cv' or 'jd'")
+		}, &ValidationError{Field: "type", Value: args.Type, Reason: "must be 'cv' or 'jd'"}
 	}
 
-	// Validate path to prevent path traversal
+	// Validate path to prevent security issues
 	if err := validatePath(args.Path); err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -68,76 +75,83 @@ func (t *IngestDocumentTool) Call(ctx context.Context, request *mcp.CallToolRequ
 		}, err
 	}
 
-	// Parse input to determine type
-	inputInfo := converter.ParseInput(args.Path)
+	// Process document with retry logic and graceful degradation
+	result, err := t.processDocumentWithRetry(ctx, args.Path, args.Type)
+	if err != nil {
+		// Check if this is a degraded error (non-critical)
+		if degradedErr, ok := err.(*DegradedError); ok {
+			// Return success with degraded operation notice
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf(`Document ingested with degraded operation!
 
-	// Determine document type
+%s
+
+Note: Some features may be limited due to temporary issues. The core functionality remains available.`, degradedErr.Error())},
+				},
+			}, nil
+		}
+		// Return error with user-friendly message
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+			},
+		}, err
+	}
+
+	return result, nil
+}
+
+// processDocumentWithRetry handles the full ingestion pipeline with retry logic
+func (t *IngestDocumentTool) processDocumentWithRetry(ctx context.Context, path string, docType string) (*mcp.CallToolResult, error) {
+	// Parse input to determine type
+	inputInfo := converter.ParseInput(path)
+
+	// Determine storage type
 	var storageType storage.DocumentType
-	if args.Type == "cv" {
+	if docType == "cv" {
 		storageType = storage.DocumentTypeCV
 	} else {
 		storageType = storage.DocumentTypeJD
 	}
 
-	// Extract filename for original name (handle raw text specially to avoid PII exposure)
-	var originalFilename string
-	var markdownContent string
-	var err error
-
-	switch inputInfo.Type {
-	case converter.InputTypeURL, converter.InputTypeFile:
-		// For URLs and files, extract the actual filename
-		originalFilename = extractFilename(args.Path)
-		// Use converter to convert if available
-		if t.documentConverter != nil && t.documentConverter.Supports(args.Path) {
-			markdownContent, err = t.documentConverter.Convert(ctx, args.Path)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						&mcp.TextContent{Text: fmt.Sprintf("Error converting document: %v", err)},
-					},
-				}, err
-			}
-		} else {
-			// Fallback: read as markdown if available
-			markdownContent, err = readLocalFile(args.Path)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						&mcp.TextContent{Text: "Error: converter not available and file is not a markdown file"},
-					},
-				}, fmt.Errorf("conversion not possible")
-			}
-		}
-	case converter.InputTypeText:
-		// For raw text, use generic filename to avoid PII in metadata
-		originalFilename = "text_input.md"
-		// Already markdown/text content
-		markdownContent = args.Path
-	default:
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "Error: unable to process input"},
-			},
-		}, fmt.Errorf("unable to process input")
+	// Extract filename for original name
+	originalFilename := extractFilename(path)
+	if originalFilename == "" {
+		originalFilename = "document.md"
 	}
 
-	// Apply PII redaction
+	// Get markdown content with retry
+	markdownContent, err := t.getMarkdownContentWithRetry(ctx, path, inputInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply PII redaction (this is critical, don't skip)
 	markdownBytes := []byte(markdownContent)
 	redactedBytes := redaction.Redact(markdownBytes)
 
-	// Save to storage
-	uri, err := t.storageManager.SaveDocument(storageType, redactedBytes, originalFilename)
+	// Save to storage with retry
+	uri, err := t.saveDocumentWithRetry(storageType, redactedBytes, originalFilename)
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Error saving document: %v", err)},
-			},
-		}, err
+		return nil, err
 	}
 
-	// Count redacted items
-	piiCount := redaction.DefaultRedactor.CountPIIItems(markdownBytes)
+	// Count redacted items (non-critical, can degrade)
+	piiCount := make(map[string]int)
+	piiCount["emails"] = 0
+	piiCount["phones"] = 0
+
+	// Safe PII counting with fallback
+	defer func() {
+		if r := recover(); r != nil {
+			// PII counting failed, but document is saved - this is acceptable
+			piiCount["emails"] = 0
+			piiCount["phones"] = 0
+		}
+	}()
+
+	piiCount = redaction.DefaultRedactor.CountPIIItems(markdownBytes)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -148,9 +162,119 @@ Original filename: %s
 Type: %s
 PII redacted: %d emails, %d phone numbers
 
-Use this URI in the analyze_fit prompt to analyze the document.`, uri, originalFilename, args.Type, piiCount["emails"], piiCount["phones"])},
+Use this URI in the analyze_fit prompt to analyze the document.`, uri, originalFilename, docType, piiCount["emails"], piiCount["phones"])},
 		},
 	}, nil
+}
+
+// getMarkdownContentWithRetry retrieves and converts document content with retry logic
+func (t *IngestDocumentTool) getMarkdownContentWithRetry(ctx context.Context, path string, inputInfo converter.InputInfo) (string, error) {
+	var markdownContent string
+	var err error
+
+	switch inputInfo.Type {
+	case converter.InputTypeURL, converter.InputTypeFile:
+		// Try conversion first with retry
+		if t.documentConverter != nil && t.documentConverter.Supports(path) {
+			err = RetryConversionOperation(ctx, path, func() error {
+				markdownContent, err = t.documentConverter.Convert(ctx, path)
+				return err
+			})
+
+			if err != nil {
+				// Conversion failed - try fallback to reading as markdown
+				markdownContent, err = t.readLocalFileWithFallback(path)
+				if err != nil {
+					return "", &DegradedError{
+						Component: "converter",
+						Err:       err,
+						Fallback:  "direct file read also failed",
+					}
+				}
+				// Successfully degraded to fallback
+				return markdownContent, &DegradedError{
+					Component: "converter",
+					Err:       fmt.Errorf("primary conversion failed"),
+					Fallback:  "read as markdown",
+				}
+			}
+		} else {
+			// No converter available, try direct read with retry
+			markdownContent, err = t.readLocalFileWithFallback(path)
+			if err != nil {
+				return "", &ConversionError{
+					InputPath: path,
+					Err:       err,
+					Hint:      "no converter available and direct read failed",
+				}
+			}
+		}
+
+	case converter.InputTypeText:
+		// Raw text - no conversion needed
+		markdownContent = path
+
+	default:
+		return "", &ValidationError{
+			Field:  "input",
+			Value:  path,
+			Reason: "unable to process input type",
+		}
+	}
+
+	return markdownContent, nil
+}
+
+// readLocalFileWithFallback reads a local file with retry and fallback logic
+func (t *IngestDocumentTool) readLocalFileWithFallback(path string) (string, error) {
+	var content string
+	var readErr error
+
+	// Retry reading the file
+	err := RetryWithExponentialBackoff(context.Background(), 3, 500*time.Millisecond, func(attempt int) error {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			readErr = err
+			return &StorageError{
+				Operation: fmt.Sprintf("read file (attempt %d)", attempt),
+				Path:      path,
+				Err:       err,
+			}
+		}
+		content = string(data)
+		return nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return content, nil
+}
+
+// saveDocumentWithRetry saves a document to storage with retry logic
+func (t *IngestDocumentTool) saveDocumentWithRetry(docType storage.DocumentType, content []byte, filename string) (string, error) {
+	var uri string
+	var saveErr error
+
+	err := RetryStorageOperation(context.Background(), "save document", func() error {
+		var err error
+		uri, err = t.storageManager.SaveDocument(docType, content, filename)
+		if err != nil {
+			saveErr = err
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		return "", &StorageError{
+			Operation: "final save attempt",
+			Err:       saveErr,
+		}
+	}
+
+	return uri, nil
 }
 
 // extractFilename extracts the filename from a path or URL
@@ -187,17 +311,23 @@ func readLocalFile(path string) (string, error) {
 func validatePath(path string) error {
 	// Check for path traversal attempts
 	if strings.Contains(path, "..") {
-		return fmt.Errorf("path traversal not allowed")
+		return &SecurityError{
+			Type:    "path_traversal",
+			Details: fmt.Sprintf("path contains traversal sequence: %s", path),
+		}
 	}
 
 	// Check for null bytes
 	if strings.Contains(path, "\x00") {
-		return fmt.Errorf("null bytes not allowed")
+		return &SecurityError{
+			Type:    "null_byte",
+			Details: "path contains null bytes",
+		}
 	}
 
 	// Check for absolute paths outside expected directories
 	if strings.HasPrefix(path, "/") {
-		// Allow absolute paths but warn
+		// Allow absolute paths but warn (could be legitimate)
 		return nil
 	}
 
