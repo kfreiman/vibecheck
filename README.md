@@ -63,11 +63,16 @@ make init-storage
 
 ### MCP Server
 
-Start the MCP server with stdio transport:
+Start the MCP server (HTTP/SSE transport only):
 
 ```bash
 ./vibecheck mcp-server
 ```
+
+The server will start on port 8080 with the following endpoints:
+- `POST /mcp` - Streamable HTTP transport (recommended)
+- `GET /sse` - SSE transport (legacy)
+- `GET /` - Help message
 
 ### CLI Commands
 

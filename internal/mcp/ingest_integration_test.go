@@ -187,7 +187,7 @@ func TestMCPServerIngest(t *testing.T) {
 	os.Setenv("VIBECHECK_STORAGE_PATH", tmpDir)
 	defer os.Unsetenv("VIBECHECK_STORAGE_PATH")
 
-	// We can't easily test the full server with stdio transport in a unit test,
+	// We can't easily test the full server with HTTP transport in a unit test,
 	// but we can verify that the handlers are properly initialized
 	storageManager, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath: tmpDir,
