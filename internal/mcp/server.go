@@ -100,9 +100,11 @@ func StartMCPServer() error {
 		Version: "2.0.0",
 	}
 	opts := &mcp.ServerOptions{
-		Instructions: `VibeCheck Server - Production-Grade CV Analysis Tool
+		Instructions: `VibeCheck Server - CV Analysis Tool (v1 - Portfolio/Demo Version)
 
-This server provides comprehensive CV and job description management with intelligent analysis.
+This server provides CV and job description management with intelligent analysis.
+
+**Note:** This is v1 for portfolio/demo purposes only. Do not use with sensitive personal data.
 
 ## Resources
 
