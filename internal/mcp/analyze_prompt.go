@@ -139,7 +139,7 @@ Provide:
 Use cv:// and jd:// resources.`, cvURI, jdURI)
 }
 
-// ParseAnalysisOutput parses structured output from LLM analysis
+// AnalysisOutput represents structured analysis results from LLM
 type AnalysisOutput struct {
 	MatchPercentage    int      `json:"match_percentage"`
 	TechnicalGaps      []string `json:"technical_gaps"`

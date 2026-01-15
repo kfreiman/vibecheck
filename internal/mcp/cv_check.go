@@ -74,7 +74,6 @@ func (t *CVCheckTool) Call(ctx context.Context, request *mcp.CallToolRequest) (*
 }
 
 // BuildAnalysisPrompt creates a structured analysis prompt for the LLM
-// BuildAnalysisPrompt creates a structured analysis prompt for the LLM
 func BuildAnalysisPrompt(cvContent, jobContent string) string {
 	return fmt.Sprintf(`You are an expert career advisor specializing in CV and job description analysis. Your task is to compare the candidate's CV against the job description and provide a comprehensive analysis.
 
