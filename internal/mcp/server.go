@@ -72,7 +72,7 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 	}, nil
 }
 
-// StartMCPServer starts an MCP server using stdio transport
+// StartMCPServer starts an MCP server using HTTP/SSE transport
 func StartMCPServer() error {
 	// Initialize storage manager
 	storageManager, err := storage.NewStorageManager(storage.StorageConfig{
@@ -346,9 +346,8 @@ Returns structured analysis with:
 		fmt.Fprintf(w, "  GET  /     - This help message\n\n")
 		fmt.Fprintf(w, "Server: %s %s\n", impl.Name, impl.Version)
 	})
-	// add slog logs
+	// Start HTTP server
 	log.Println("Starting MCP server on port 8080")
-	// Use stdio transport (legacy)
 	return http.ListenAndServe(":8080", mux)
 }
 
