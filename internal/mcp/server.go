@@ -91,6 +91,7 @@ func StartMCPServer() error {
 	storageResourceHandler := NewStorageResourceHandler(storageManager)
 	ingestTool := NewIngestDocumentTool(storageManager, documentConverter)
 	cleanupTool := NewCleanupStorageTool(storageManager)
+	listDocumentsTool := NewListDocumentsTool(storageManager)
 	cvCheckTool, _ := NewCVCheckTool()
 	analyzeFitPrompt := NewAnalyzeFitPrompt(storageManager)
 
@@ -142,6 +143,15 @@ Parameters:
 - ttl: Time to live (e.g., "24h" or 24 for hours)
 
 Example: {"ttl": "48h"}
+
+### list_documents
+List all stored documents (CVs and job descriptions) by their UUIDs.
+Parameters:
+- type: Optional filter - "cv" for CVs only, "jd" for job descriptions only, or empty for all
+
+Example: {"type": "cv"}
+
+Returns structured list of document URIs (cv://[uuid] or jd://[uuid]).
 
 ### cv_check
 Compare a CV against a job description (legacy method).
@@ -241,6 +251,23 @@ Returns structured analysis with:
 			"required": []string{},
 		},
 	}, cleanupTool.Call)
+
+	// list_documents tool
+	server.AddTool(&mcp.Tool{
+		Name:        "list_documents",
+		Description: "List all stored documents (CVs and job descriptions) by their UUIDs. Returns structured data with document URIs.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"type": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional filter: 'cv' for CVs only, 'jd' for job descriptions only, or empty for all documents",
+					"enum":        []string{"cv", "jd"},
+				},
+			},
+			"required": []string{},
+		},
+	}, listDocumentsTool.Call)
 
 	// cv_check tool (legacy)
 	if cvCheckTool != nil {
