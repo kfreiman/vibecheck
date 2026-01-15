@@ -106,6 +106,14 @@ This server provides CV and job description management with intelligent analysis
 
 **Note:** This is v1 for portfolio/demo purposes only. Do not use with sensitive personal data.
 
+## Transport
+
+This server uses HTTP/SSE transport only. Connect via:
+- POST /mcp  - Streamable HTTP transport (recommended)
+- GET  /sse  - SSE transport (legacy)
+
+Stdio transport is not supported.
+
 ## Resources
 
 ### File Resources (file://)
