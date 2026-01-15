@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -207,13 +206,11 @@ func (t *IngestDocumentTool) getMarkdownContentWithRetry(ctx context.Context, pa
 // readLocalFileWithFallback reads a local file with retry and fallback logic
 func (t *IngestDocumentTool) readLocalFileWithFallback(path string) (string, error) {
 	var content string
-	var readErr error
 
 	// Retry reading the file
 	err := RetryWithExponentialBackoff(context.Background(), 3, 500*time.Millisecond, func(attempt int) error {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			readErr = err
 			return &StorageError{
 				Operation: fmt.Sprintf("read file (attempt %d)", attempt),
 				Path:      path,

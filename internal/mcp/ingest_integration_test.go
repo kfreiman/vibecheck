@@ -69,7 +69,6 @@ func TestIngestIntegration(t *testing.T) {
 		// Check result contains URI
 		textContent := result.Content[0].(*mcp.TextContent).Text
 		assert.Contains(t, textContent, "cv://", "Should return CV URI")
-		assert.Contains(t, textContent, "PII redacted", "Should mention PII redaction")
 
 		// Verify storage stats increased
 		cvCount, jdCount, _ := storageManager.GetStorageStats()
@@ -93,10 +92,9 @@ func TestIngestIntegration(t *testing.T) {
 		assert.Contains(t, contentStr, "id:", "Frontmatter should contain ID")
 		assert.Contains(t, contentStr, "type: cv", "Frontmatter should have type cv")
 
-		// Check for redacted PII
-		assert.Contains(t, contentStr, "[EMAIL_REDACTED]", "Email should be redacted")
-		assert.Contains(t, contentStr, "[PHONE_REDACTED]", "Phone should be redacted")
-		assert.NotContains(t, contentStr, "jane@example.com", "Original email should not be present")
+		// Verify content is preserved (no redaction in v1)
+		assert.Contains(t, contentStr, "jane@example.com", "Original email should be preserved")
+		assert.Contains(t, contentStr, "555-123-4567", "Original phone should be preserved")
 	})
 
 	// Test 2: Ingest JD with raw text

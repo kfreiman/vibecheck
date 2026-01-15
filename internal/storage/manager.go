@@ -10,6 +10,34 @@ import (
 	"github.com/google/uuid"
 )
 
+// StorageError represents a storage-related failure
+type StorageError struct {
+	Operation string
+	Path      string
+	Err       error
+}
+
+func (e *StorageError) Error() string {
+	msg := fmt.Sprintf("storage error during %s", e.Operation)
+	if e.Path != "" {
+		msg += fmt.Sprintf(" (path: %s)", e.Path)
+	}
+	if e.Err != nil {
+		msg += fmt.Sprintf(": %v", e.Err)
+	}
+	return msg
+}
+
+func (e *StorageError) Unwrap() error {
+	return e.Err
+}
+
+// IsRetryable indicates if this storage error is retryable
+func (e *StorageError) IsRetryable() bool {
+	// Storage errors are typically transient (I/O issues, locks, permissions)
+	return true
+}
+
 // DocumentType represents the type of document being stored
 type DocumentType string
 
@@ -46,7 +74,11 @@ func NewStorageManager(config StorageConfig) (*StorageManager, error) {
 
 	for _, path := range []string{cvPath, jdPath} {
 		if err := os.MkdirAll(path, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create storage directory %s: %w", path, err)
+			return nil, &StorageError{
+				Operation: "init - create directory",
+				Path:      path,
+				Err:       err,
+			}
 		}
 	}
 
@@ -105,7 +137,11 @@ type: %s
 	fullContent := frontmatter + string(content)
 
 	if err := os.WriteFile(path, []byte(fullContent), 0644); err != nil {
-		return "", fmt.Errorf("failed to write document: %w", err)
+		return "", &StorageError{
+			Operation: "save document",
+			Path:      path,
+			Err:       err,
+		}
 	}
 
 	return fmt.Sprintf("%s://%s", docType, id), nil
@@ -128,7 +164,11 @@ func (sm *StorageManager) GetDocumentPath(uri string) (string, error) {
 	dir := sm.GetPath(docType)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return "", fmt.Errorf("failed to read directory: %w", err)
+		return "", &StorageError{
+			Operation: "read directory",
+			Path:      dir,
+			Err:       err,
+		}
 	}
 
 	for _, entry := range entries {
@@ -141,13 +181,19 @@ func (sm *StorageManager) GetDocumentPath(uri string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("document not found: %s", uri)
+	return "", &StorageError{
+		Operation: "find document",
+		Err:       fmt.Errorf("document not found: %s", uri),
+	}
 }
 
 // ParseURI parses a URI into document type and ID
 func ParseURI(uri string) (DocumentType, string, error) {
 	if len(uri) < 6 {
-		return "", "", fmt.Errorf("invalid URI: too short")
+		return "", "", &StorageError{
+			Operation: "parse URI",
+			Err:       fmt.Errorf("URI too short: %s", uri),
+		}
 	}
 
 	scheme := uri[:5]
@@ -159,7 +205,10 @@ func ParseURI(uri string) (DocumentType, string, error) {
 	case "jd://":
 		docType = DocumentTypeJD
 	default:
-		return "", "", fmt.Errorf("unsupported URI scheme: %s", scheme)
+		return "", "", &StorageError{
+			Operation: "parse URI",
+			Err:       fmt.Errorf("unsupported URI scheme: %s", scheme),
+		}
 	}
 
 	id := uri[5:]
@@ -175,7 +224,11 @@ func (sm *StorageManager) ReadDocument(uri string) ([]byte, error) {
 
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read document: %w", err)
+		return nil, &StorageError{
+			Operation: "read document",
+			Path:      path,
+			Err:       err,
+		}
 	}
 
 	return content, nil
