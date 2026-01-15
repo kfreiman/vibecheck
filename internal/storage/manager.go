@@ -304,3 +304,37 @@ func (sm *StorageManager) GetStorageStats() (cvCount, jdCount int64, err error) 
 
 	return cvCount, jdCount, nil
 }
+
+// ListAllDocuments returns all stored document UUIDs by type
+func (sm *StorageManager) ListAllDocuments() (cvUUIDs, jdUUIDs []string, err error) {
+	for _, docType := range []DocumentType{DocumentTypeCV, DocumentTypeJD} {
+		dir := sm.GetPath(docType)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return nil, nil, &StorageError{
+				Operation: "list documents",
+				Path:      dir,
+				Err:       err,
+			}
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				// Extract UUID from filename (remove extension)
+				name := entry.Name()
+				ext := filepath.Ext(name)
+				if ext != "" {
+					uuid := name[:len(name)-len(ext)]
+					switch docType {
+					case DocumentTypeCV:
+						cvUUIDs = append(cvUUIDs, uuid)
+					case DocumentTypeJD:
+						jdUUIDs = append(jdUUIDs, uuid)
+					}
+				}
+			}
+		}
+	}
+
+	return cvUUIDs, jdUUIDs, nil
+}
