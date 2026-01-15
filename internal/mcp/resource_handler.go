@@ -58,24 +58,32 @@ func (h *StorageResourceHandler) ReadResource(ctx context.Context, req *mcp.Read
 
 // ListResources lists all available resources
 func (h *StorageResourceHandler) ListResources() []*mcp.Resource {
-	cvCount, jdCount, _ := h.storageManager.GetStorageStats()
+	cvUUIDs, jdUUIDs, _ := h.storageManager.ListAllDocuments()
 
-	resources := []*mcp.Resource{
-		{
-			URI:         "cv://list",
-			Name:        "CV Documents",
-			Description: "List of all stored CV documents",
+	resources := []*mcp.Resource{}
+
+	// Add individual CV resources
+	for _, uuid := range cvUUIDs {
+		resources = append(resources, &mcp.Resource{
+			URI:         "cv://" + uuid,
+			Name:        "CV: " + uuid,
+			Description: "Stored CV document",
 			MIMEType:    "text/markdown",
-		},
-		{
-			URI:         "jd://list",
-			Name:        "Job Descriptions",
-			Description: "List of all stored job descriptions",
-			MIMEType:    "text/markdown",
-		},
+		})
 	}
 
-	if cvCount > 0 || jdCount > 0 {
+	// Add individual JD resources
+	for _, uuid := range jdUUIDs {
+		resources = append(resources, &mcp.Resource{
+			URI:         "jd://" + uuid,
+			Name:        "JD: " + uuid,
+			Description: "Stored job description",
+			MIMEType:    "text/markdown",
+		})
+	}
+
+	// Add stats resource if there are any documents
+	if len(cvUUIDs) > 0 || len(jdUUIDs) > 0 {
 		resources = append(resources, &mcp.Resource{
 			URI:         "vibecheck://storage/stats",
 			Name:        "Storage Statistics",
