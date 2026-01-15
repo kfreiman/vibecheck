@@ -1,0 +1,214 @@
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/kfreiman/vibecheck/internal/storage"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+// TestIngestIntegration tests the full flow: storage creation, ingestion, and verification
+func TestIngestIntegration(t *testing.T) {
+	// Use a unique temp directory for this test
+	tmpDir, err := os.MkdirTemp("", "vibecheck-integration-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Override the storage path
+	originalStoragePath := os.Getenv("VIBECHECK_STORAGE_PATH")
+	os.Setenv("VIBECHECK_STORAGE_PATH", tmpDir)
+	defer func() {
+		if originalStoragePath != "" {
+			os.Setenv("VIBECHECK_STORAGE_PATH", originalStoragePath)
+		} else {
+			os.Unsetenv("VIBECHECK_STORAGE_PATH")
+		}
+	}()
+
+	// Initialize storage manager with the temp directory
+	config := storage.StorageConfig{
+		BasePath:   tmpDir,
+		DefaultTTL: 24 * time.Hour,
+	}
+	storageManager, err := storage.NewStorageManager(config)
+	require.NoError(t, err)
+
+	// Verify initial state
+	cvCount, jdCount, err := storageManager.GetStorageStats()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), cvCount, "Should start with 0 CVs")
+	assert.Equal(t, int64(0), jdCount, "Should start with 0 JDs")
+
+	// Create ingest tool
+	ingestTool := NewIngestDocumentTool(storageManager, nil)
+
+	// Test 1: Ingest CV with raw text
+	t.Run("IngestCVRawText", func(t *testing.T) {
+		cvContent := "# Software Engineer CV\n\nName: Jane Doe\nEmail: jane@example.com\nPhone: 555-123-4567\nSkills: Go, Python, AWS\n"
+		args := map[string]interface{}{
+			"path": cvContent,
+			"type": "cv",
+		}
+		argsBytes, _ := json.Marshal(args)
+
+		result, err := ingestTool.Call(context.Background(), &mcp.CallToolRequest{
+			Params: &mcp.CallToolParamsRaw{Arguments: argsBytes},
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// Check result contains URI
+		textContent := result.Content[0].(*mcp.TextContent).Text
+		assert.Contains(t, textContent, "cv://", "Should return CV URI")
+		assert.Contains(t, textContent, "PII redacted", "Should mention PII redaction")
+
+		// Verify storage stats increased
+		cvCount, jdCount, _ := storageManager.GetStorageStats()
+		assert.Equal(t, int64(1), cvCount, "Should have 1 CV")
+		assert.Equal(t, int64(0), jdCount, "Should have 0 JDs")
+
+		// Verify file exists and has correct format
+		cvDir := filepath.Join(tmpDir, "cv")
+		entries, err := os.ReadDir(cvDir)
+		require.NoError(t, err)
+		require.Len(t, entries, 1, "Should have exactly one file")
+
+		// Read the file
+		filePath := filepath.Join(cvDir, entries[0].Name())
+		content, err := os.ReadFile(filePath)
+		require.NoError(t, err)
+
+		// Check for frontmatter
+		contentStr := string(content)
+		assert.Contains(t, contentStr, "---", "Should have frontmatter")
+		assert.Contains(t, contentStr, "id:", "Frontmatter should contain ID")
+		assert.Contains(t, contentStr, "type: cv", "Frontmatter should have type cv")
+
+		// Check for redacted PII
+		assert.Contains(t, contentStr, "[EMAIL_REDACTED]", "Email should be redacted")
+		assert.Contains(t, contentStr, "[PHONE_REDACTED]", "Phone should be redacted")
+		assert.NotContains(t, contentStr, "jane@example.com", "Original email should not be present")
+	})
+
+	// Test 2: Ingest JD with raw text
+	t.Run("IngestJDRawText", func(t *testing.T) {
+		jdContent := "# Senior Go Developer Position\n\nRequirements: 5+ years Go, Kubernetes, AWS\nContact: hiring@company.com\n"
+		args := map[string]interface{}{
+			"path": jdContent,
+			"type": "jd",
+		}
+		argsBytes, _ := json.Marshal(args)
+
+		_, err := ingestTool.Call(context.Background(), &mcp.CallToolRequest{
+			Params: &mcp.CallToolParamsRaw{Arguments: argsBytes},
+		})
+
+		require.NoError(t, err)
+
+		// Verify storage stats
+		cvCount, jdCount, _ := storageManager.GetStorageStats()
+		assert.Equal(t, int64(1), cvCount, "Should still have 1 CV")
+		assert.Equal(t, int64(1), jdCount, "Should now have 1 JD")
+	})
+
+	// Test 3: Ingest markdown file
+	t.Run("IngestMarkdownFile", func(t *testing.T) {
+		// Create a temp file
+		testFile := filepath.Join(tmpDir, "test_resume.md")
+		fileContent := "# Test Resume\n\nName: John Smith\nEmail: john.smith@test.com\n"
+		err := os.WriteFile(testFile, []byte(fileContent), 0644)
+		require.NoError(t, err)
+
+		args := map[string]interface{}{
+			"path": testFile,
+			"type": "cv",
+		}
+		argsBytes, _ := json.Marshal(args)
+
+		_, err = ingestTool.Call(context.Background(), &mcp.CallToolRequest{
+			Params: &mcp.CallToolParamsRaw{Arguments: argsBytes},
+		})
+
+		require.NoError(t, err)
+
+		// Verify storage
+		cvCount, jdCount, _ := storageManager.GetStorageStats()
+		assert.Equal(t, int64(2), cvCount, "Should now have 2 CVs")
+		assert.Equal(t, int64(1), jdCount, "Should still have 1 JD")
+	})
+
+	// Test 4: Deduplication - same content should not create new file
+	t.Run("Deduplication", func(t *testing.T) {
+		sameContent := "# Duplicate CV\n\nName: Same Person\n"
+
+		// Ingest first time
+		args1 := map[string]interface{}{
+			"path": sameContent,
+			"type": "cv",
+		}
+		argsBytes1, _ := json.Marshal(args1)
+		_, err := ingestTool.Call(context.Background(), &mcp.CallToolRequest{
+			Params: &mcp.CallToolParamsRaw{Arguments: argsBytes1},
+		})
+		require.NoError(t, err)
+
+		cvCount1, _, _ := storageManager.GetStorageStats()
+
+		// Ingest second time with same content
+		_, err = ingestTool.Call(context.Background(), &mcp.CallToolRequest{
+			Params: &mcp.CallToolParamsRaw{Arguments: argsBytes1},
+		})
+		require.NoError(t, err)
+
+		cvCount2, _, _ := storageManager.GetStorageStats()
+
+		// Count should not increase
+		assert.Equal(t, cvCount1, cvCount2, "Same content should not create duplicate")
+	})
+}
+
+// TestMCPServerIngest tests the server's ability to handle ingest requests
+func TestMCPServerIngest(t *testing.T) {
+	// Create temp storage
+	tmpDir, err := os.MkdirTemp("", "vibecheck-server-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Set env var for server to use this dir
+	os.Setenv("VIBECHECK_STORAGE_PATH", tmpDir)
+	defer os.Unsetenv("VIBECHECK_STORAGE_PATH")
+
+	// We can't easily test the full server with stdio transport in a unit test,
+	// but we can verify that the handlers are properly initialized
+	storageManager, err := storage.NewStorageManager(storage.StorageConfig{
+		BasePath: tmpDir,
+	})
+	require.NoError(t, err)
+
+	// Create handlers like the server does
+	ingestTool := NewIngestDocumentTool(storageManager, nil)
+	cleanupTool := NewCleanupStorageTool(storageManager)
+	storageHandler := NewStorageResourceHandler(storageManager)
+
+	// Verify handlers are not nil
+	require.NotNil(t, ingestTool)
+	require.NotNil(t, cleanupTool)
+	require.NotNil(t, storageHandler)
+
+	// Verify storage resources can be listed
+	resources := storageHandler.ListResources()
+	assert.NotEmpty(t, resources, "Should have some resources")
+
+	// Verify resource templates exist
+	templates := storageHandler.ListResourceTemplates()
+	assert.Len(t, templates, 2, "Should have 2 templates (cv:// and jd://)")
+}

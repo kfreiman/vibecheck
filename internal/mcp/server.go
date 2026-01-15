@@ -1,0 +1,371 @@
+package mcp
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/kfreiman/vibecheck/internal/converter"
+	"github.com/kfreiman/vibecheck/internal/storage"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+// CVResourceHandler handles CV resource requests
+type CVResourceHandler struct{}
+
+// ReadResource processes resource requests for CV data
+func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	uri := req.Params.URI
+
+	// Handle file:// scheme only
+	if !strings.HasPrefix(uri, "file://") {
+		return nil, mcp.ResourceNotFoundError(uri)
+	}
+
+	// Parse path from URI
+	path := strings.TrimPrefix(uri, "file://")
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, mcp.ResourceNotFoundError(uri)
+	}
+
+	// Check if it's a directory - list CV files
+	if stat, err := os.Stat(path); err == nil && stat.IsDir() {
+		cvFiles, err := FindCVFiles(path)
+		if err != nil {
+			return nil, mcp.ResourceNotFoundError(uri)
+		}
+
+		var list strings.Builder
+		list.WriteString("# CV Files\n\n")
+		for _, f := range cvFiles {
+			fmt.Fprintf(&list, "- file://%s\n", f)
+		}
+		list.WriteString("\nUse file:///path/to/file.md to read a specific CV.\n")
+
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{{
+				URI:      uri,
+				MIMEType: "text/markdown",
+				Text:     list.String(),
+			}},
+		}, nil
+	}
+
+	// Read single file
+	content, err := ReadCVFile(path)
+	if err != nil {
+		return nil, mcp.ResourceNotFoundError(uri)
+	}
+
+	return &mcp.ReadResourceResult{
+		Contents: []*mcp.ResourceContents{{
+			URI:      uri,
+			MIMEType: "text/markdown",
+			Text:     content,
+		}},
+	}, nil
+}
+
+// StartMCPServer starts an MCP server using stdio transport
+func StartMCPServer() error {
+	// Initialize storage manager
+	storageManager, err := storage.NewStorageManager(storage.StorageConfig{
+		BasePath:   getEnvOrDefault("VIBECHECK_STORAGE_PATH", "./storage"),
+		DefaultTTL: getEnvDurationOrDefault("VIBECHECK_STORAGE_TTL", 24*time.Hour),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to initialize storage: %w", err)
+	}
+
+	// Initialize document converter (pure Go PDF extraction)
+	documentConverter := converter.NewPDFConverter()
+
+	// Create handlers
+	cvHandler := &CVResourceHandler{}
+	storageResourceHandler := NewStorageResourceHandler(storageManager)
+	ingestTool := NewIngestDocumentTool(storageManager, documentConverter)
+	cleanupTool := NewCleanupStorageTool(storageManager)
+	cvCheckTool, _ := NewCVCheckTool()
+	analyzeFitPrompt := NewAnalyzeFitPrompt(storageManager)
+
+	// Create MCP server
+	impl := &mcp.Implementation{
+		Name:    "VibeCheckServer",
+		Version: "2.0.0",
+	}
+	opts := &mcp.ServerOptions{
+		Instructions: `VibeCheck Server - Production-Grade CV Analysis Tool
+
+This server provides comprehensive CV and job description management with intelligent analysis.
+
+## Resources
+
+### File Resources (file://)
+- file:///path/to/cv.md: Read a CV markdown file
+- file:///path/to/cv/: List all CV files in a directory
+
+### Storage Resources (cv://, jd://)
+- cv://[uuid]: Access an ingested CV document
+- jd://[uuid]: Access an ingested job description
+
+## Tools
+
+### ingest_document
+Ingest a CV or job description into storage.
+Parameters:
+- path: File path or URL to document (PDF, MD)
+- type: Document type ("cv" or "jd")
+
+Example: {"path": "./resume.pdf", "type": "cv"}
+
+Returns a URI (cv://[uuid] or jd://[uuid]) for later use.
+
+### cleanup_storage
+Remove old documents from storage based on TTL.
+Parameters:
+- ttl: Time to live (e.g., "24h" or 24 for hours)
+
+Example: {"ttl": "48h"}
+
+### cv_check
+Compare a CV against a job description (legacy method).
+Parameters:
+- cv: CV content or file path
+- job: Job description content or file path
+
+## Prompts
+
+### cv_analysis
+Analyze CV vs job description using raw content or URLs.
+Parameters (choose one for CV and one for job):
+- cv_content: Raw CV markdown text
+- cv_url: URL to CV document
+- cv_filepath: Path to CV file
+- job_content: Raw job description text
+- job_url: URL to job posting
+- job_filepath: Path to job file
+
+### analyze_fit
+Analyze fit between ingested CV and job description.
+Parameters:
+- cv_uri: URI of ingested CV (cv://[uuid])
+- jd_uri: URI of ingested job description (jd://[uuid])
+
+Example: {"cv_uri": "cv://550e8400-e29b...", "jd_uri": "jd://550e8400-e29b..."}
+
+Returns structured analysis with:
+- Match percentage
+- Technical gap analysis
+- Evidence-based questions
+- Key strengths
+- Recommendations
+
+## Environment Variables
+
+- VIBECHECK_STORAGE_PATH: Storage directory (default: ./storage)
+- VIBECHECK_STORAGE_TTL: Default TTL for cleanup (default: 24h)
+`,
+	}
+	server := mcp.NewServer(impl, opts)
+
+	// Register file-based resources
+	server.AddResource(&mcp.Resource{
+		URI:         "file:///cv",
+		Name:        "CV Directory",
+		Description: "List all CV markdown files",
+		MIMEType:    "text/markdown",
+	}, cvHandler.ReadResource)
+
+	// Register storage resources
+	for _, resource := range storageResourceHandler.ListResources() {
+		server.AddResource(resource, storageResourceHandler.ReadResource)
+	}
+
+	// Register resource templates
+	for _, template := range storageResourceHandler.ListResourceTemplates() {
+		server.AddResourceTemplate(&template, storageResourceHandler.ReadResource)
+	}
+
+	// Register tools
+
+	// ingest_document tool
+	server.AddTool(&mcp.Tool{
+		Name:        "ingest_document",
+		Description: "Ingest a CV or job description into storage. Supports local paths, URLs, and various document formats (PDF, DOCX, MD). Returns a URI for later use.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"path": map[string]interface{}{
+					"type":        "string",
+					"description": "File path, URL, or raw markdown content to ingest",
+				},
+				"type": map[string]interface{}{
+					"type":        "string",
+					"description": "Document type: 'cv' or 'jd'",
+					"enum":        []string{"cv", "jd"},
+					"default":     "cv",
+				},
+			},
+			"required": []string{"path"},
+		},
+	}, ingestTool.Call)
+
+	// cleanup_storage tool
+	server.AddTool(&mcp.Tool{
+		Name:        "cleanup_storage",
+		Description: "Remove documents older than the specified TTL from storage. Useful for maintaining storage hygiene.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"ttl": map[string]interface{}{
+					"type":        "string",
+					"description": "Time to live (e.g., '24h', '7d', or hours as number). Uses default TTL if not specified.",
+				},
+			},
+			"required": []string{},
+		},
+	}, cleanupTool.Call)
+
+	// cv_check tool (legacy)
+	if cvCheckTool != nil {
+		server.AddTool(&mcp.Tool{
+			Name:        "cv_check",
+			Description: "Compare a CV against a job description. Accepts file paths or raw text for both parameters.",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"cv": map[string]interface{}{
+						"type":        "string",
+						"description": "CV content (file path or raw text)",
+					},
+					"job": map[string]interface{}{
+						"type":        "string",
+						"description": "Job description content (file path or raw text)",
+					},
+				},
+				"required": []string{"cv", "job"},
+			},
+		}, cvCheckTool.Call)
+	}
+
+	// Register prompts
+
+	// cv_analysis prompt (existing)
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "cv_analysis",
+		Description: "CV vs Job Description Analysis Prompt",
+		Arguments: []*mcp.PromptArgument{
+			{
+				Name:        CVContentParam,
+				Title:       "CV Content",
+				Description: "Raw CV content (markdown text)",
+				Required:    false,
+			},
+			{
+				Name:        CVURLParam,
+				Title:       "CV URL",
+				Description: "URL to CV document (PDF) - will be converted to markdown",
+				Required:    false,
+			},
+			{
+				Name:        CVFilepathParam,
+				Title:       "CV Filepath",
+				Description: "Path to CV file (PDF, MD) - will be converted to markdown",
+				Required:    false,
+			},
+			{
+				Name:        JobContentParam,
+				Title:       "Job Content",
+				Description: "Raw job description content (markdown text)",
+				Required:    false,
+			},
+			{
+				Name:        JobURLParam,
+				Title:       "Job URL",
+				Description: "URL to job posting (PDF) - will be converted to markdown",
+				Required:    false,
+			},
+			{
+				Name:        JobFilepathParam,
+				Title:       "Job Filepath",
+				Description: "Path to job description file (PDF, MD) - will be converted to markdown",
+				Required:    false,
+			},
+		},
+	}, CVPromptHandler)
+
+	// analyze_fit prompt (new)
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "analyze_fit",
+		Description: "Analyze fit between ingested CV and job description with structured output",
+		Arguments: []*mcp.PromptArgument{
+			{
+				Name:        "cv_uri",
+				Title:       "CV URI",
+				Description: "URI of ingested CV (cv://[uuid])",
+				Required:    true,
+			},
+			{
+				Name:        "jd_uri",
+				Title:       "Job Description URI",
+				Description: "URI of ingested job description (jd://[uuid])",
+				Required:    true,
+			},
+		},
+	}, analyzeFitPrompt.Handle)
+
+	// Create HTTP streaming handler
+	httpHandler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
+		return server
+	}, &mcp.StreamableHTTPOptions{
+		JSONResponse: true,
+		Logger:       nil,
+	})
+
+	// Also support SSE for compatibility
+	sseHandler := mcp.NewSSEHandler(func(req *http.Request) *mcp.Server {
+		return server
+	}, &mcp.SSEOptions{})
+
+	// Set up HTTP server with routes
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", httpHandler)
+	mux.Handle("/sse", sseHandler)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprintf(w, "VibeCheck MCP Server\n\n")
+		fmt.Fprintf(w, "Endpoints:\n")
+		fmt.Fprintf(w, "  POST /mcp  - Streamable HTTP transport (recommended)\n")
+		fmt.Fprintf(w, "  GET  /sse  - SSE transport\n")
+		fmt.Fprintf(w, "  GET  /     - This help message\n\n")
+		fmt.Fprintf(w, "Server: %s %s\n", impl.Name, impl.Version)
+	})
+	// add slog logs
+	log.Println("Starting MCP server on port 8080")
+	// Use stdio transport (legacy)
+	return http.ListenAndServe(":8080", mux)
+}
+
+// getEnvOrDefault returns an environment variable or a default value
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// getEnvDurationOrDefault returns an environment variable as duration or default
+func getEnvDurationOrDefault(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if duration, err := time.ParseDuration(value); err == nil {
+			return duration
+		}
+	}
+	return defaultValue
+}

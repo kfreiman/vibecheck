@@ -1,0 +1,18 @@
+services:
+  vibecheck:
+    container_name: vibecheck
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      main:
+    command: mcp-server
+    environment:
+      VIBECHECK_STORAGE_PATH: ${VIBECHECK_STORAGE_PATH:-./storage}
+      VIBECHECK_STORAGE_TTL: ${VIBECHECK_STORAGE_TTL:-24h}
+    ports:
+      - ${VIBECHECK_MCP_PORT:-8080}:8080
+
+networks:
+  main:
+    driver: bridge
