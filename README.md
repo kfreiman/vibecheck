@@ -4,34 +4,16 @@ A production-grade MCP (Model Context Protocol) server for ingesting CVs and job
 
 ## Features
 
-- **Document Ingestion**: Support for PDF, DOCX, PPTX, XLSX, and markdown files
+- **Document Ingestion**: Support for PDF and markdown files (pure Go implementation)
 - **Content-Based Deduplication**: UUID v5 generation ensures same file gets same URI
-- **PII Redaction**: Automatic filtering of emails and phone numbers
 - **Storage Management**: Persistent storage with TTL-based cleanup
 - **Dual URI Schemes**: `cv://[uuid]` and `jd://[uuid]` for stored documents
 - **Structured Analysis**: Prompts for CV vs job description comparison
+- **HTTP/SSE Transport**: Streamable HTTP and SSE endpoints for MCP communication
 
 ## Prerequisites
 
-### Go
-
 - Go 1.21 or higher
-
-### Python & MarkItDown
-
-The server uses Microsoft's MarkItDown for document conversion:
-
-```bash
-# Install Python (if not installed)
-# macOS: brew install python
-# Ubuntu: sudo apt install python3 python3-pip
-
-# Install MarkItDown
-pip install markitdown
-
-# Verify installation
-markitdown --help
-```
 
 ## Installation
 
@@ -81,7 +63,7 @@ The server will start on port 8080 with the following endpoints:
 ./vibecheck --help
 
 # Start MCP server
-./vichbeck mcp-server
+./vibecheck mcp-server
 ```
 
 ### Development
@@ -188,22 +170,76 @@ vibecheck/
 │   │   ├── ingest_tool.go  # ingest_document tool
 │   │   ├── cleanup_tool.go # cleanup_storage tool
 │   │   ├── analyze_prompt.go # analyze_fit prompt
-│   │   └── resource_handler.go # cv://, jd:// handlers
+│   │   ├── resource_handler.go # cv://, jd:// handlers
+│   │   ├── errors.go       # Structured error types
+│   │   └── retry.go        # Retry logic with exponential backoff
 │   ├── storage/
 │   │   └── manager.go      # Storage with UUID v5
 │   ├── converter/
-│   │   └── markitdown.go   # MarkItDown wrapper
-│   └── redaction/
-│       └── redact.go       # PII redaction filter
+│   │   └── pdf.go          # Pure Go PDF conversion
 └── storage/                # Runtime storage (gitignored)
 ```
 
 ## Security
 
-- **Path Traversal Prevention**: Strict path validation
-- **PII Redaction**: Automatic filtering of emails and phone numbers
-- **Context Cancellation**: Python process killed on timeout
-- **Error Handling**: Detailed error messages with stderr capture
+- **Path Traversal Prevention**: Strict path validation for file operations
+- **Context Cancellation**: Operations respect context timeouts
+- **Error Handling**: Structured error types with detailed context
+- **Retry Logic**: Exponential backoff with jitter for transient failures
+
+## Production Deployment
+
+### Docker
+
+```bash
+# Build the image
+docker build -t vibecheck .
+
+# Run the container
+docker run -p 8080:8080 \
+  -e VIBECHECK_STORAGE_PATH=/app/storage \
+  -e VIBECHECK_STORAGE_TTL=24h \
+  -v $(pwd)/storage:/app/storage \
+  vibecheck
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VIBECHECK_STORAGE_PATH` | Storage directory | `./storage` |
+| `VIBECHECK_STORAGE_TTL` | Default TTL for cleanup | `24h` |
+
+### Health Checks
+
+The server exposes endpoints for health monitoring:
+
+```bash
+# Check if server is responding
+curl http://localhost:8080/
+
+# Check MCP endpoint
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+```
+
+### Storage Management
+
+Regular cleanup is recommended to prevent storage bloat:
+
+```bash
+# Manual cleanup (remove files older than 24h)
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cleanup_storage","arguments":{"ttl":"24h"}}}'
+```
+
+### Monitoring
+
+- **Port**: 8080 (HTTP)
+- **Endpoints**: `/mcp` (streamable HTTP), `/sse` (SSE), `/` (health/help)
+- **Logs**: Server logs to stdout/stderr (use Docker logs for containerized deployment)
 
 ## Testing
 
