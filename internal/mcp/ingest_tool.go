@@ -127,31 +127,11 @@ func (t *IngestDocumentTool) processDocumentWithRetry(ctx context.Context, path 
 		return nil, err
 	}
 
-	// Apply PII redaction (this is critical, don't skip)
-	markdownBytes := []byte(markdownContent)
-	redactedBytes := redaction.Redact(markdownBytes)
-
 	// Save to storage with retry
-	uri, err := t.saveDocumentWithRetry(storageType, redactedBytes, originalFilename)
+	uri, err := t.saveDocumentWithRetry(storageType, []byte(markdownContent), originalFilename)
 	if err != nil {
 		return nil, err
 	}
-
-	// Count redacted items (non-critical, can degrade)
-	piiCount := make(map[string]int)
-	piiCount["emails"] = 0
-	piiCount["phones"] = 0
-
-	// Safe PII counting with fallback
-	defer func() {
-		if r := recover(); r != nil {
-			// PII counting failed, but document is saved - this is acceptable
-			piiCount["emails"] = 0
-			piiCount["phones"] = 0
-		}
-	}()
-
-	piiCount = redaction.DefaultRedactor.CountPIIItems(markdownBytes)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -160,9 +140,8 @@ func (t *IngestDocumentTool) processDocumentWithRetry(ctx context.Context, path 
 URI: %s
 Original filename: %s
 Type: %s
-PII redacted: %d emails, %d phone numbers
 
-Use this URI in the analyze_fit prompt to analyze the document.`, uri, originalFilename, docType, piiCount["emails"], piiCount["phones"])},
+Use this URI in the analyze_fit prompt to analyze the document.`, uri, originalFilename, docType)},
 		},
 	}, nil
 }
