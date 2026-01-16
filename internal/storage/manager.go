@@ -1,13 +1,16 @@
 package storage
 
 import (
+	"context"
 	"crypto/sha1"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/samber/slog-zerolog"
 )
 
 // StorageError represents a storage-related failure
@@ -46,6 +49,8 @@ const (
 	DocumentTypeJD DocumentType = "jd"
 )
 
+var logger = slog.New(slogzerolog.Option{}.NewZerologHandler())
+
 // StorageConfig holds configuration for the storage manager
 type StorageConfig struct {
 	BasePath    string
@@ -60,6 +65,8 @@ type StorageManager struct {
 
 // NewStorageManager creates a new storage manager
 func NewStorageManager(config StorageConfig) (*StorageManager, error) {
+	ctx := context.Background()
+
 	// Set defaults
 	if config.BasePath == "" {
 		config.BasePath = "./storage"
@@ -74,6 +81,11 @@ func NewStorageManager(config StorageConfig) (*StorageManager, error) {
 
 	for _, path := range []string{cvPath, jdPath} {
 		if err := os.MkdirAll(path, 0755); err != nil {
+			logger.ErrorContext(ctx, "failed to create storage directory",
+				"error", err,
+				"path", path,
+				"operation", "init",
+			)
 			return nil, &StorageError{
 				Operation: "init - create directory",
 				Path:      path,
@@ -81,6 +93,11 @@ func NewStorageManager(config StorageConfig) (*StorageManager, error) {
 			}
 		}
 	}
+
+	logger.InfoContext(ctx, "storage manager initialized",
+		"base_path", config.BasePath,
+		"default_ttl", config.DefaultTTL,
+	)
 
 	return &StorageManager{
 		basePath:   config.BasePath,
@@ -108,6 +125,7 @@ func GenerateIDFromString(content string) string {
 
 // SaveDocument saves a document to storage and returns its URI
 func (sm *StorageManager) SaveDocument(docType DocumentType, content []byte, originalFilename string) (string, error) {
+	ctx := context.Background()
 	id := GenerateID(content)
 
 	// Check if file already exists (deduplication)
@@ -121,6 +139,11 @@ func (sm *StorageManager) SaveDocument(docType DocumentType, content []byte, ori
 	// Check if exists
 	if _, err := os.Stat(path); err == nil {
 		// File already exists, return existing URI
+		logger.DebugContext(ctx, "document already exists (deduplication)",
+			"doc_type", docType,
+			"id", id,
+			"path", path,
+		)
 		return fmt.Sprintf("%s://%s", docType, id), nil
 	}
 
@@ -131,18 +154,31 @@ original_filename: %s
 ingested_at: %s
 type: %s
 ---
-
 `, id, originalFilename, time.Now().UTC().Format(time.RFC3339), docType)
 
 	fullContent := frontmatter + string(content)
 
 	if err := os.WriteFile(path, []byte(fullContent), 0644); err != nil {
+		logger.ErrorContext(ctx, "failed to save document",
+			"error", err,
+			"doc_type", docType,
+			"id", id,
+			"path", path,
+			"operation", "save",
+		)
 		return "", &StorageError{
 			Operation: "save document",
 			Path:      path,
 			Err:       err,
 		}
 	}
+
+	logger.InfoContext(ctx, "document saved",
+		"doc_type", docType,
+		"id", id,
+		"path", path,
+		"filename", originalFilename,
+	)
 
 	return fmt.Sprintf("%s://%s", docType, id), nil
 }
@@ -217,19 +253,36 @@ func ParseURI(uri string) (DocumentType, string, error) {
 
 // ReadDocument reads a document from storage
 func (sm *StorageManager) ReadDocument(uri string) ([]byte, error) {
+	ctx := context.Background()
 	path, err := sm.GetDocumentPath(uri)
 	if err != nil {
+		logger.ErrorContext(ctx, "failed to get document path",
+			"error", err,
+			"uri", uri,
+			"operation", "read",
+		)
 		return nil, err
 	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {
+		logger.ErrorContext(ctx, "failed to read document",
+			"error", err,
+			"path", path,
+			"uri", uri,
+			"operation", "read",
+		)
 		return nil, &StorageError{
 			Operation: "read document",
 			Path:      path,
 			Err:       err,
 		}
 	}
+
+	logger.DebugContext(ctx, "document read",
+		"uri", uri,
+		"path", path,
+	)
 
 	return content, nil
 }
@@ -246,6 +299,7 @@ func (sm *StorageManager) DocumentExists(uri string) bool {
 
 // Cleanup removes documents older than the specified TTL
 func (sm *StorageManager) Cleanup(ttl time.Duration) (int64, error) {
+	ctx := context.Background()
 	if ttl == 0 {
 		ttl = sm.defaultTTL
 	}
@@ -257,6 +311,11 @@ func (sm *StorageManager) Cleanup(ttl time.Duration) (int64, error) {
 		dir := sm.GetPath(docType)
 		entries, err := os.ReadDir(dir)
 		if err != nil {
+			logger.ErrorContext(ctx, "failed to read directory for cleanup",
+				"error", err,
+				"dir", dir,
+				"doc_type", docType,
+			)
 			continue
 		}
 
@@ -278,15 +337,26 @@ func (sm *StorageManager) Cleanup(ttl time.Duration) (int64, error) {
 		}
 	}
 
+	logger.InfoContext(ctx, "storage cleanup completed",
+		"removed", removed,
+		"ttl", ttl,
+	)
+
 	return removed, nil
 }
 
 // GetStorageStats returns statistics about the storage
 func (sm *StorageManager) GetStorageStats() (cvCount, jdCount int64, err error) {
+	ctx := context.Background()
 	for _, docType := range []DocumentType{DocumentTypeCV, DocumentTypeJD} {
 		dir := sm.GetPath(docType)
 		entries, err := os.ReadDir(dir)
 		if err != nil {
+			logger.ErrorContext(ctx, "failed to read directory for stats",
+				"error", err,
+				"dir", dir,
+				"doc_type", docType,
+			)
 			return 0, 0, err
 		}
 
@@ -302,15 +372,26 @@ func (sm *StorageManager) GetStorageStats() (cvCount, jdCount int64, err error) 
 		}
 	}
 
+	logger.DebugContext(ctx, "storage stats retrieved",
+		"cv_count", cvCount,
+		"jd_count", jdCount,
+	)
+
 	return cvCount, jdCount, nil
 }
 
 // ListAllDocuments returns all stored document UUIDs by type
 func (sm *StorageManager) ListAllDocuments() (cvUUIDs, jdUUIDs []string, err error) {
+	ctx := context.Background()
 	for _, docType := range []DocumentType{DocumentTypeCV, DocumentTypeJD} {
 		dir := sm.GetPath(docType)
 		entries, err := os.ReadDir(dir)
 		if err != nil {
+			logger.ErrorContext(ctx, "failed to read directory for listing",
+				"error", err,
+				"dir", dir,
+				"doc_type", docType,
+			)
 			return nil, nil, &StorageError{
 				Operation: "list documents",
 				Path:      dir,
@@ -335,6 +416,11 @@ func (sm *StorageManager) ListAllDocuments() (cvUUIDs, jdUUIDs []string, err err
 			}
 		}
 	}
+
+	logger.DebugContext(ctx, "listed all documents",
+		"cv_count", len(cvUUIDs),
+		"jd_count", len(jdUUIDs),
+	)
 
 	return cvUUIDs, jdUUIDs, nil
 }
