@@ -1,7 +1,7 @@
 services:
   vibecheck:
     build:
-      dockerfile: Dockerfile.dev
+      dockerfile: docker/Dockerfile.dev
       args:
         DIR: ${PWD} # for better links to source in logs
     volumes:
