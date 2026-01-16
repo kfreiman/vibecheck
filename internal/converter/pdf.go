@@ -95,6 +95,11 @@ func (c *PDFConverter) Close() error {
 
 // convertFile extracts text from a PDF file using go-pdfium
 func (c *PDFConverter) convertFile(path string) (string, error) {
+	// Check for path traversal before resolving the path
+	if strings.Contains(path, "..") {
+		return "", &PathValidationError{Path: path, Reason: "path traversal not allowed"}
+	}
+
 	// Resolve and validate path
 	resolvedPath, err := filepath.Abs(path)
 	if err != nil {
@@ -103,11 +108,6 @@ func (c *PDFConverter) convertFile(path string) (string, error) {
 
 	if _, err := os.Stat(resolvedPath); err != nil {
 		return "", &FileNotFoundError{Path: path}
-	}
-
-	// Check for path traversal
-	if strings.Contains(resolvedPath, "..") {
-		return "", &PathValidationError{Path: path, Reason: "path traversal not allowed"}
 	}
 
 	// Read PDF file into memory
