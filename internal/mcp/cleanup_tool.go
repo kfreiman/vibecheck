@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/kfreiman/vibecheck/internal/storage"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // CleanupStorageTool handles storage cleanup
@@ -31,6 +31,10 @@ func (t *CleanupStorageTool) Call(ctx context.Context, request *mcp.CallToolRequ
 	}
 
 	if err := json.Unmarshal(request.Params.Arguments, &args); err != nil {
+		logger.ErrorContext(ctx, "failed to parse cleanup arguments",
+			"error", err,
+			"operation", "cleanup_storage",
+		)
 		return nil, fmt.Errorf("invalid input format: %w", err)
 	}
 
@@ -45,6 +49,11 @@ func (t *CleanupStorageTool) Call(ctx context.Context, request *mcp.CallToolRequ
 			if hours, err := strconv.Atoi(args.TTL); err == nil {
 				ttl = time.Duration(hours) * time.Hour
 			} else {
+				logger.ErrorContext(ctx, "invalid TTL format",
+					"error", err,
+					"ttl_input", args.TTL,
+					"operation", "cleanup_storage",
+				)
 				return &mcp.CallToolResult{
 					Content: []mcp.Content{
 						&mcp.TextContent{Text: "Error: invalid TTL format. Use duration string (e.g., '24h') or hours as number"},
@@ -57,6 +66,10 @@ func (t *CleanupStorageTool) Call(ctx context.Context, request *mcp.CallToolRequ
 	// Get storage stats before cleanup
 	cvCountBefore, jdCountBefore, err := t.storageManager.GetStorageStats()
 	if err != nil {
+		logger.ErrorContext(ctx, "failed to get storage stats before cleanup",
+			"error", err,
+			"operation", "cleanup_storage",
+		)
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: fmt.Sprintf("Error getting storage stats: %v", err)},
@@ -67,6 +80,11 @@ func (t *CleanupStorageTool) Call(ctx context.Context, request *mcp.CallToolRequ
 	// Perform cleanup
 	removed, err := t.storageManager.Cleanup(ttl)
 	if err != nil {
+		logger.ErrorContext(ctx, "cleanup operation failed",
+			"error", err,
+			"ttl", ttl,
+			"operation", "cleanup_storage",
+		)
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: fmt.Sprintf("Error during cleanup: %v", err)},
@@ -81,6 +99,15 @@ func (t *CleanupStorageTool) Call(ctx context.Context, request *mcp.CallToolRequ
 	if ttl > 0 {
 		ttlDisplay = ttl.String()
 	}
+
+	logger.InfoContext(ctx, "storage cleanup completed via tool",
+		"ttl", ttlDisplay,
+		"removed", removed,
+		"cv_before", cvCountBefore,
+		"cv_after", cvCountAfter,
+		"jd_before", jdCountBefore,
+		"jd_after", jdCountAfter,
+	)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -117,8 +144,11 @@ func StartCleanupRoutine(storageManager *storage.StorageManager, interval, ttl t
 
 		for range ticker.C {
 			if removed, err := storageManager.Cleanup(ttl); err == nil {
-				// Log cleanup results (in production, use proper logging)
-				fmt.Printf("Storage cleanup: removed %d files\n", removed)
+				logger.InfoContext(context.Background(), "periodic storage cleanup completed",
+					"removed", removed,
+					"interval", interval,
+					"ttl", ttl,
+				)
 			}
 		}
 	}()
@@ -128,12 +158,21 @@ func StartCleanupRoutine(storageManager *storage.StorageManager, interval, ttl t
 func GetStorageStatsHandler(ctx context.Context, storageManager *storage.StorageManager) (*mcp.CallToolResult, error) {
 	cvCount, jdCount, err := storageManager.GetStorageStats()
 	if err != nil {
+		logger.ErrorContext(ctx, "failed to get storage stats",
+			"error", err,
+			"operation", "get_storage_stats",
+		)
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: fmt.Sprintf("Error getting storage stats: %v", err)},
 			},
 		}, err
 	}
+
+	logger.DebugContext(ctx, "storage stats retrieved via handler",
+		"cv_count", cvCount,
+		"jd_count", jdCount,
+	)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{

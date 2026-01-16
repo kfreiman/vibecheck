@@ -3,7 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,7 +13,10 @@ import (
 	"github.com/kfreiman/vibecheck/internal/converter"
 	"github.com/kfreiman/vibecheck/internal/storage"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/samber/slog-zerolog"
 )
+
+var logger = slog.New(slogzerolog.Option{}.NewZerologHandler())
 
 // CVResourceHandler handles CV resource requests
 type CVResourceHandler struct{}
@@ -31,6 +34,10 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 	path := strings.TrimPrefix(uri, "file://")
 	path, err := filepath.Abs(path)
 	if err != nil {
+		logger.ErrorContext(ctx, "failed to parse file URI",
+			"error", err,
+			"uri", uri,
+		)
 		return nil, mcp.ResourceNotFoundError(uri)
 	}
 
@@ -38,6 +45,10 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 	if stat, err := os.Stat(path); err == nil && stat.IsDir() {
 		cvFiles, err := FindCVFiles(path)
 		if err != nil {
+			logger.ErrorContext(ctx, "failed to find CV files",
+				"error", err,
+				"path", path,
+			)
 			return nil, mcp.ResourceNotFoundError(uri)
 		}
 
@@ -47,6 +58,11 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 			fmt.Fprintf(&list, "- file://%s\n", f)
 		}
 		list.WriteString("\nUse file:///path/to/file.md to read a specific CV.\n")
+
+		logger.DebugContext(ctx, "listed CV files in directory",
+			"path", path,
+			"count", len(cvFiles),
+		)
 
 		return &mcp.ReadResourceResult{
 			Contents: []*mcp.ResourceContents{{
@@ -60,8 +76,17 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 	// Read single file
 	content, err := ReadCVFile(path)
 	if err != nil {
+		logger.ErrorContext(ctx, "failed to read CV file",
+			"error", err,
+			"path", path,
+		)
 		return nil, mcp.ResourceNotFoundError(uri)
 	}
+
+	logger.DebugContext(ctx, "read CV file",
+		"path", path,
+		"size", len(content),
+	)
 
 	return &mcp.ReadResourceResult{
 		Contents: []*mcp.ResourceContents{{
@@ -74,12 +99,17 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 
 // StartMCPServer starts an MCP server using HTTP/SSE transport
 func StartMCPServer() error {
+	ctx := context.Background()
+
 	// Initialize storage manager
 	storageManager, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath:   getEnvOrDefault("VIBECHECK_STORAGE_PATH", "./storage"),
 		DefaultTTL: getEnvDurationOrDefault("VIBECHECK_STORAGE_TTL", 24*time.Hour),
 	})
 	if err != nil {
+		logger.ErrorContext(ctx, "failed to initialize storage manager",
+			"error", err,
+		)
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 
@@ -433,7 +463,10 @@ Returns structured analysis with:
 		fmt.Fprintf(w, "Server: %s %s\n", impl.Name, impl.Version)
 	})
 	// Start HTTP server
-	log.Println("Starting MCP server on port 8080")
+	logger.InfoContext(ctx, "starting MCP server",
+		"port", 8080,
+		"endpoints", []string{"/mcp", "/sse", "/"},
+	)
 	return http.ListenAndServe(":8080", mux)
 }
 
