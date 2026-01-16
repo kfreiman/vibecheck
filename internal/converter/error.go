@@ -11,12 +11,16 @@ type ConversionError struct {
 	Stderr        string
 	Path          string
 	Hint          string
+	PageNum       int
 }
 
 func (e *ConversionError) Error() string {
-	msg := fmt.Sprintf("markitdown conversion failed: %v", e.OriginalError)
+	msg := fmt.Sprintf("PDF conversion failed: %v", e.OriginalError)
 	if e.Path != "" {
 		msg += fmt.Sprintf(" (file: %s)", e.Path)
+	}
+	if e.PageNum > 0 {
+		msg += fmt.Sprintf(" [page %d]", e.PageNum)
 	}
 	if e.Stderr != "" {
 		// Truncate stderr if too long

@@ -2,29 +2,60 @@ package converter
 
 import (
 	"context"
-	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/ledongthuc/pdf"
+	"github.com/klippa-app/go-pdfium"
+	"github.com/klippa-app/go-pdfium/requests"
+	"github.com/klippa-app/go-pdfium/webassembly"
 )
 
-// PDFConverter extracts text from PDF files using pure Go
-type PDFConverter struct{}
+// PDFConverter extracts text from PDF files using go-pdfium (webassembly)
+type PDFConverter struct {
+	pool     pdfium.Pool
+	instance pdfium.Pdfium
+}
 
 // NewPDFConverter creates a new PDFConverter
 func NewPDFConverter() *PDFConverter {
-	return &PDFConverter{}
+	// Initialize PDFium in webassembly mode (pure Go, no native deps)
+	pool, err := webassembly.Init(webassembly.Config{
+		MinIdle:  1,
+		MaxIdle:  1,
+		MaxTotal: 1,
+	})
+	if err != nil {
+		// If initialization fails, return a converter with nil instance
+		// This will be handled by IsAvailable() returning false
+		return &PDFConverter{pool: nil, instance: nil}
+	}
+
+	instance, err := pool.GetInstance(time.Second * 30)
+	if err != nil {
+		// If initialization fails, return a converter with nil instance
+		// This will be handled by IsAvailable() returning false
+		pool.Close()
+		return &PDFConverter{pool: nil, instance: nil}
+	}
+	return &PDFConverter{pool: pool, instance: instance}
 }
 
-// IsAvailable always returns true - pure Go has no external deps
+// IsAvailable returns true if PDFium was initialized successfully
 func (c *PDFConverter) IsAvailable() bool {
-	return true
+	return c.instance != nil
 }
 
 // Convert extracts text from a PDF file
 func (c *PDFConverter) Convert(ctx context.Context, input string) (string, error) {
+	if !c.IsAvailable() {
+		return "", &ConversionError{
+			Hint: "PDFium instance not available",
+		}
+	}
+
 	info := ParseInput(input)
 
 	switch info.Type {
@@ -46,7 +77,23 @@ func (c *PDFConverter) Supports(input string) bool {
 	return strings.EqualFold(info.Ext, ".pdf")
 }
 
-// convertFile extracts text from a PDF file
+// Close cleans up the PDFium instance and pool
+func (c *PDFConverter) Close() error {
+	var firstErr error
+	if c.instance != nil {
+		if err := c.instance.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if c.pool != nil {
+		if err := c.pool.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// convertFile extracts text from a PDF file using go-pdfium
 func (c *PDFConverter) convertFile(path string) (string, error) {
 	// Resolve and validate path
 	resolvedPath, err := filepath.Abs(path)
@@ -63,35 +110,70 @@ func (c *PDFConverter) convertFile(path string) (string, error) {
 		return "", &PathValidationError{Path: path, Reason: "path traversal not allowed"}
 	}
 
-	// Open PDF
-	f, reader, err := pdf.Open(resolvedPath)
+	// Read PDF file into memory
+	pdfBytes, err := ioutil.ReadFile(resolvedPath)
 	if err != nil {
 		return "", &ConversionError{
 			OriginalError: err,
 			Path:          path,
-			Hint:          "failed to open PDF",
+			Hint:          "failed to read PDF file",
 		}
 	}
-	defer f.Close()
+
+	// Open PDF document
+	doc, err := c.instance.OpenDocument(&requests.OpenDocument{
+		File: &pdfBytes,
+	})
+	if err != nil {
+		return "", &ConversionError{
+			OriginalError: err,
+			Path:          path,
+			Hint:          "failed to open PDF document",
+		}
+	}
+	defer c.instance.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: doc.Document})
+
+	// Get page count
+	pageCount, err := c.instance.FPDF_GetPageCount(&requests.FPDF_GetPageCount{
+		Document: doc.Document,
+	})
+	if err != nil {
+		return "", &ConversionError{
+			OriginalError: err,
+			Path:          path,
+			Hint:          "failed to get page count",
+		}
+	}
 
 	// Extract text from all pages
-	text, err := reader.GetPlainText()
-	if err != nil {
-		return "", &ConversionError{
-			OriginalError: err,
-			Path:          path,
-			Hint:          "failed to extract text from PDF",
+	var allText strings.Builder
+	for i := 0; i < pageCount.PageCount; i++ {
+		// Get text from page using GetPageText (simpler API)
+		pageText, err := c.instance.GetPageText(&requests.GetPageText{
+			Page: requests.Page{
+				ByIndex: &requests.PageByIndex{
+					Document: doc.Document,
+					Index:    i,
+				},
+			},
+		})
+		if err != nil {
+			return "", &ConversionError{
+				OriginalError: err,
+				Path:          path,
+				PageNum:       i + 1,
+				Hint:          "failed to extract text from page",
+			}
+		}
+
+		// Add page text to result
+		if pageText.Text != "" {
+			if allText.Len() > 0 {
+				allText.WriteString("\n\n")
+			}
+			allText.WriteString(pageText.Text)
 		}
 	}
 
-	content, err := io.ReadAll(text)
-	if err != nil {
-		return "", &ConversionError{
-			OriginalError: err,
-			Path:          path,
-			Hint:          "failed to read PDF text",
-		}
-	}
-
-	return string(content), nil
+	return allText.String(), nil
 }
