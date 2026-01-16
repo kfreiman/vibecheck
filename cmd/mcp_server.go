@@ -20,6 +20,11 @@ var mcpServerCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 
+		cmdLogger.InfoContext(ctx, "mcp server starting",
+			"port", 8080,
+			"endpoints", []string{"/mcp", "/sse", "/health/live", "/health/ready"},
+		)
+
 		err := mcp.StartMCPServer()
 		if err != nil {
 			cmdLogger.ErrorContext(ctx, "failed to start MCP server",
