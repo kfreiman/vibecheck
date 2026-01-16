@@ -380,6 +380,25 @@ func (sm *StorageManager) GetStorageStats() (cvCount, jdCount int64, err error) 
 	return cvCount, jdCount, nil
 }
 
+// IsAccessible checks if storage is accessible and directories exist
+func (sm *StorageManager) IsAccessible() bool {
+	// Check base path exists
+	if _, err := os.Stat(sm.basePath); err != nil {
+		return false
+	}
+	// Check cv directory
+	cvPath := sm.GetPath(DocumentTypeCV)
+	if _, err := os.Stat(cvPath); err != nil {
+		return false
+	}
+	// Check jd directory
+	jdPath := sm.GetPath(DocumentTypeJD)
+	if _, err := os.Stat(jdPath); err != nil {
+		return false
+	}
+	return true
+}
+
 // ListAllDocuments returns all stored document UUIDs by type
 func (sm *StorageManager) ListAllDocuments() (cvUUIDs, jdUUIDs []string, err error) {
 	ctx := context.Background()
