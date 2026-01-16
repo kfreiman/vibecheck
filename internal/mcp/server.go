@@ -94,6 +94,7 @@ func StartMCPServer() error {
 	listDocumentsTool := NewListDocumentsTool(storageManager)
 	cvCheckTool, _ := NewCVCheckTool()
 	analyzeFitPrompt := NewAnalyzeFitPrompt(storageManager)
+	interviewQuestionsTool := NewInterviewQuestionsTool(storageManager)
 
 	// Create MCP server
 	impl := &mcp.Implementation{
@@ -158,6 +159,21 @@ Compare a CV against a job description (legacy method).
 Parameters:
 - cv: CV content or file path
 - job: Job description content or file path
+
+### generate_interview_questions
+Generate targeted interview questions based on CV and job description gap analysis.
+Parameters:
+- cv_uri: URI of ingested CV (cv://[uuid])
+- jd_uri: URI of ingested job description (jd://[uuid])
+- style: Optional - "technical", "behavioral", or "comprehensive" (default)
+- count: Optional - number of questions to generate (default: 5)
+
+Example: {"cv_uri": "cv://550e8400-e29b...", "jd_uri": "jd://550e8400-e29b...", "style": "technical", "count": 5}
+
+Returns a prompt for generating interview questions focused on:
+- Skills/experience gaps between CV and JD
+- Areas needing clarification
+- Technical and behavioral question balance
 
 ## Prompts
 
@@ -290,6 +306,39 @@ Returns structured analysis with:
 			},
 		}, cvCheckTool.Call)
 	}
+
+	// generate_interview_questions tool
+	server.AddTool(&mcp.Tool{
+		Name:        "generate_interview_questions",
+		Description: "Generate targeted interview questions based on CV and job description gap analysis. Returns a prompt for generating questions focused on skills gaps, areas needing clarification, and technical/behavioral balance.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"cv_uri": map[string]interface{}{
+					"type":        "string",
+					"description": "URI of ingested CV (cv://[uuid])",
+				},
+				"jd_uri": map[string]interface{}{
+					"type":        "string",
+					"description": "URI of ingested job description (jd://[uuid])",
+				},
+				"style": map[string]interface{}{
+					"type":        "string",
+					"description": "Question style: 'technical', 'behavioral', or 'comprehensive' (default)",
+					"enum":        []string{"technical", "behavioral", "comprehensive"},
+					"default":     "comprehensive",
+				},
+				"count": map[string]interface{}{
+					"type":        "integer",
+					"description": "Number of questions to generate (default: 5)",
+					"minimum":     1,
+					"maximum":     20,
+					"default":     5,
+				},
+			},
+			"required": []string{"cv_uri", "jd_uri"},
+		},
+	}, interviewQuestionsTool.Call)
 
 	// Register prompts
 
