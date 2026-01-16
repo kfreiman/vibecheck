@@ -11,11 +11,11 @@ FROM golang:1.25-bookworm AS builder
 
 RUN go install github.com/air-verse/air@latest
 
+
 ARG DIR
 WORKDIR ${DIR}
 
 COPY . .
 
-# Command to run air
 ENV GOFLAGS="-buildvcs=false"
 ENTRYPOINT ["air", "-c", ".air.toml"]

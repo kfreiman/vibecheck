@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -119,7 +119,7 @@ func (c *HTMLConverter) Supports(input string) bool {
 func (c *HTMLConverter) Close() error {
 	var firstErr error
 	if c.browser != nil {
-		if err := c.browser.Close(); err != nil && firstErr == nil {
+		if err := c.browser.Close(); err != nil {
 			firstErr = err
 		}
 	}
@@ -149,7 +149,7 @@ func (c *HTMLConverter) convertFile(ctx context.Context, path string) (string, e
 	}
 
 	// Read HTML file
-	htmlBytes, err := ioutil.ReadFile(resolvedPath)
+	htmlBytes, err := os.ReadFile(resolvedPath)
 	if err != nil {
 		return "", &ConversionError{
 			OriginalError: err,
@@ -183,14 +183,14 @@ func (c *HTMLConverter) convertURL(ctx context.Context, urlStr string) (string, 
 	// Handle file:// URLs specially
 	if strings.HasPrefix(urlStr, "file://") {
 		filePath := strings.TrimPrefix(urlStr, "file://")
-		return c.convertFile(ctx, filePath)
+		return c.convertFile(context.Background(), filePath)
 	}
 
 	// First, try to download and parse with go-readability (faster, no browser)
 	resp, err := http.Get(urlStr)
 	if err == nil && resp.StatusCode == http.StatusOK {
 		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err == nil {
 			parsedURL, _ := url.Parse(urlStr)
 			article, err := readability.FromReader(bytes.NewReader(body), parsedURL)
@@ -211,7 +211,7 @@ func (c *HTMLConverter) convertURL(ctx context.Context, urlStr string) (string, 
 }
 
 // renderWithPlaywright uses playwright to render the page and extract content
-func (c *HTMLConverter) renderWithPlaywright(ctx context.Context, urlStr string) (string, error) {
+func (c *HTMLConverter) renderWithPlaywright(_ context.Context, urlStr string) (string, error) {
 	// Create a new page
 	page, err := c.browser.NewPage()
 	if err != nil {

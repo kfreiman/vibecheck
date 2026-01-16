@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/kfreiman/vibecheck/internal/mcp"
-	"github.com/samber/slog-zerolog"
+	slogzerolog "github.com/samber/slog-zerolog"
 	"github.com/spf13/cobra"
 )
 

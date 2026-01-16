@@ -2,7 +2,6 @@ package converter
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -72,9 +71,7 @@ func TestHTMLConverter_Convert_StaticHTML(t *testing.T) {
 	defer converter.Close()
 
 	// Create a temporary HTML file with main content and boilerplate
-	tmpDir, err := ioutil.TempDir("", "html-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Note: go-readability focuses on main content area.
 	// The name is included in the main content, not just the header.
@@ -109,7 +106,7 @@ func TestHTMLConverter_Convert_StaticHTML(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "cv.html")
-	err = ioutil.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
 	require.NoError(t, err)
 
 	// Test conversion
@@ -134,14 +131,14 @@ func TestHTMLConverter_Convert_MalformedHTML(t *testing.T) {
 	require.NoError(t, err)
 	defer converter.Close()
 
-	tmpDir, err := ioutil.TempDir("", "html-test-*")
+	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
 	// Malformed HTML - missing closing tags
 	htmlContent := `<html><head><title>Test</title><body><h1>Content</h1><p>Some text`
 	htmlFile := filepath.Join(tmpDir, "malformed.html")
-	err = ioutil.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
 	require.NoError(t, err)
 
 	// Should still work (playwright handles malformed HTML)
@@ -170,13 +167,13 @@ func TestHTMLConverter_Convert_EmptyHTML(t *testing.T) {
 	require.NoError(t, err)
 	defer converter.Close()
 
-	tmpDir, err := ioutil.TempDir("", "html-test-*")
+	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
 	htmlContent := `<!DOCTYPE html><html><head><title></title></head><body></body></html>`
 	htmlFile := filepath.Join(tmpDir, "empty.html")
-	err = ioutil.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
 	require.NoError(t, err)
 
 	// Should handle gracefully
@@ -216,7 +213,7 @@ func TestHTMLConverter_Convert_URL(t *testing.T) {
 	require.NoError(t, err)
 	defer converter.Close()
 
-	tmpDir, err := ioutil.TempDir("", "html-test-*")
+	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
@@ -232,7 +229,7 @@ func TestHTMLConverter_Convert_URL(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "url-test.html")
-	err = ioutil.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
 	require.NoError(t, err)
 
 	// Use file:// URL
@@ -277,7 +274,7 @@ func TestHTMLConverter_convertFile(t *testing.T) {
 	require.NoError(t, err)
 	defer converter.Close()
 
-	tmpDir, err := ioutil.TempDir("", "html-test-*")
+	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
@@ -293,7 +290,7 @@ func TestHTMLConverter_convertFile(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "test.html")
-	err = ioutil.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
 	require.NoError(t, err)
 
 	t.Run("extracts content from valid file", func(t *testing.T) {
@@ -323,7 +320,7 @@ func TestHTMLConverter_convertURL(t *testing.T) {
 	require.NoError(t, err)
 	defer converter.Close()
 
-	tmpDir, err := ioutil.TempDir("", "html-test-*")
+	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
@@ -339,7 +336,7 @@ func TestHTMLConverter_convertURL(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "url-test.html")
-	err = ioutil.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
 	require.NoError(t, err)
 
 	t.Run("extracts content from file URL", func(t *testing.T) {
@@ -356,9 +353,7 @@ func TestHTMLConverter_renderWithPlaywright(t *testing.T) {
 	require.NoError(t, err)
 	defer converter.Close()
 
-	tmpDir, err := ioutil.TempDir("", "html-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create test HTML
 	htmlContent := `<!DOCTYPE html>
@@ -372,7 +367,7 @@ func TestHTMLConverter_renderWithPlaywright(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "playwright.html")
-	err = ioutil.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
 	require.NoError(t, err)
 
 	t.Run("renders and extracts content", func(t *testing.T) {
@@ -418,9 +413,7 @@ func TestHTMLConverter_Integration(t *testing.T) {
 	require.NoError(t, err)
 	defer converter.Close()
 
-	tmpDir, err := ioutil.TempDir("", "html-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create a realistic CV HTML
 	// Note: go-readability extracts content from the main article area
@@ -492,7 +485,7 @@ func TestHTMLConverter_Integration(t *testing.T) {
 </html>`
 
 	cvFile := filepath.Join(tmpDir, "jane-smith-cv.html")
-	err = ioutil.WriteFile(cvFile, []byte(cvHTML), 0644)
+	err = os.WriteFile(cvFile, []byte(cvHTML), 0644)
 	require.NoError(t, err)
 
 	// Test conversion

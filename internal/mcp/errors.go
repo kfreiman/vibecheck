@@ -56,9 +56,9 @@ func (e *ConversionError) Unwrap() error {
 
 // ValidationError represents input validation failure
 type ValidationError struct {
-	Field   string
-	Value   string
-	Reason  string
+	Field  string
+	Value  string
+	Reason string
 }
 
 func (e *ValidationError) Error() string {
@@ -73,8 +73,8 @@ func (e *ValidationError) Error() string {
 
 // SecurityError represents a security violation
 type SecurityError struct {
-	Type     string // e.g., "path_traversal", "null_byte", "unauthorized"
-	Details  string
+	Type    string // e.g., "path_traversal", "null_byte", "unauthorized"
+	Details string
 }
 
 func (e *SecurityError) Error() string {
@@ -89,7 +89,7 @@ type NetworkError struct {
 }
 
 func (e *NetworkError) Error() string {
-	msg := fmt.Sprintf("network error")
+	msg := "network error"
 	if e.URL != "" {
 		msg += fmt.Sprintf(" accessing %s", e.URL)
 	}
@@ -156,9 +156,9 @@ func IsRetryable(err error) bool {
 		return false
 	}
 	// Check for specific retryable error types
-	switch err.(type) {
+	switch err := err.(type) {
 	case *NetworkError:
-		ne := err.(*NetworkError)
+		ne := err
 		// Retry on 5xx errors or timeout
 		return ne.Status >= 500 || ne.Status == 0
 	case *StorageError:

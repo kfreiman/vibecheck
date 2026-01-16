@@ -202,9 +202,22 @@ func TestMCPServerIngest(t *testing.T) {
 	require.NotNil(t, cleanupTool)
 	require.NotNil(t, storageHandler)
 
+	// Ingest a document first so we have resources to list
+	cvContent := "# Test CV\n\nName: Test User\nEmail: test@example.com\n"
+	args := map[string]interface{}{
+		"path": cvContent,
+		"type": "cv",
+	}
+	argsBytes, _ := json.Marshal(args)
+
+	_, err = ingestTool.Call(context.Background(), &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{Arguments: argsBytes},
+	})
+	require.NoError(t, err)
+
 	// Verify storage resources can be listed
 	resources := storageHandler.ListResources()
-	assert.NotEmpty(t, resources, "Should have some resources")
+	assert.NotEmpty(t, resources, "Should have some resources after ingestion")
 
 	// Verify resource templates exist
 	templates := storageHandler.ListResourceTemplates()

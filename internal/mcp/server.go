@@ -97,6 +97,7 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 	}, nil
 }
 
+// TODO: accept logger
 // StartMCPServer starts an MCP server using HTTP/SSE transport
 func StartMCPServer() error {
 	ctx := context.Background()
@@ -140,9 +141,8 @@ This server provides CV and job description management with intelligent analysis
 
 ## Transport
 
-This server uses HTTP/SSE transport only. Connect via:
+This server uses streamable HTTP transport only. Connect via:
 - POST /mcp  - Streamable HTTP transport (recommended)
-- GET  /sse  - SSE transport (legacy)
 
 Stdio transport is not supported.
 
@@ -444,15 +444,9 @@ Returns structured analysis with:
 		Logger:       nil,
 	})
 
-	// Also support SSE for compatibility
-	sseHandler := mcp.NewSSEHandler(func(req *http.Request) *mcp.Server {
-		return server
-	}, &mcp.SSEOptions{})
-
 	// Set up HTTP server with routes
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", httpHandler)
-	mux.Handle("/sse", sseHandler)
 	mux.HandleFunc("/health/live", LivenessHandler)
 	mux.HandleFunc("/health/ready", ReadinessHandlerFunc(storageManager))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -460,7 +454,6 @@ Returns structured analysis with:
 		fmt.Fprintf(w, "VibeCheck MCP Server\n\n")
 		fmt.Fprintf(w, "Endpoints:\n")
 		fmt.Fprintf(w, "  POST /mcp          - Streamable HTTP transport (recommended)\n")
-		fmt.Fprintf(w, "  GET  /sse          - SSE transport\n")
 		fmt.Fprintf(w, "  GET  /health/live  - Liveness probe\n")
 		fmt.Fprintf(w, "  GET  /health/ready - Readiness probe\n")
 		fmt.Fprintf(w, "  GET  /             - This help message\n\n")
@@ -469,7 +462,7 @@ Returns structured analysis with:
 	// Start HTTP server
 	logger.InfoContext(ctx, "starting MCP server",
 		"port", 8080,
-		"endpoints", []string{"/mcp", "/sse", "/health/live", "/health/ready", "/"},
+		"endpoints", []string{"/mcp", "/health/live", "/health/ready", "/"},
 	)
 	return http.ListenAndServe(":8080", mux)
 }

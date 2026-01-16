@@ -1,6 +1,8 @@
 services:
   vibecheck:
-    container_name: vibecheck
     build:
-      context: .
       dockerfile: Dockerfile.dev
+      args:
+        DIR: ${PWD} # for better links to source in logs
+    volumes:
+      - ${PWD}:${PWD}
