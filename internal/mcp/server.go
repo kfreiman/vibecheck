@@ -453,19 +453,23 @@ Returns structured analysis with:
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", httpHandler)
 	mux.Handle("/sse", sseHandler)
+	mux.HandleFunc("/health/live", LivenessHandler)
+	mux.HandleFunc("/health/ready", ReadinessHandlerFunc(storageManager))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		fmt.Fprintf(w, "VibeCheck MCP Server\n\n")
 		fmt.Fprintf(w, "Endpoints:\n")
-		fmt.Fprintf(w, "  POST /mcp  - Streamable HTTP transport (recommended)\n")
-		fmt.Fprintf(w, "  GET  /sse  - SSE transport\n")
-		fmt.Fprintf(w, "  GET  /     - This help message\n\n")
+		fmt.Fprintf(w, "  POST /mcp          - Streamable HTTP transport (recommended)\n")
+		fmt.Fprintf(w, "  GET  /sse          - SSE transport\n")
+		fmt.Fprintf(w, "  GET  /health/live  - Liveness probe\n")
+		fmt.Fprintf(w, "  GET  /health/ready - Readiness probe\n")
+		fmt.Fprintf(w, "  GET  /             - This help message\n\n")
 		fmt.Fprintf(w, "Server: %s %s\n", impl.Name, impl.Version)
 	})
 	// Start HTTP server
 	logger.InfoContext(ctx, "starting MCP server",
 		"port", 8080,
-		"endpoints", []string{"/mcp", "/sse", "/"},
+		"endpoints", []string{"/mcp", "/sse", "/health/live", "/health/ready", "/"},
 	)
 	return http.ListenAndServe(":8080", mux)
 }
