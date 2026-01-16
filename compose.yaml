@@ -3,7 +3,7 @@ services:
     container_name: vibecheck
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile
     networks:
       main:
     command: mcp-server
