@@ -1,22 +1,31 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/kfreiman/vibecheck/internal/mcp"
+	"github.com/samber/slog-zerolog"
 	"github.com/spf13/cobra"
 )
+
+var cmdLogger = slog.New(slogzerolog.Option{}.NewZerologHandler())
 
 // mcpServerCmd represents the mcp-server command
 var mcpServerCmd = &cobra.Command{
 	Use:   "mcp-server",
 	Short: "Start an MCP server",
 	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
 
 		err := mcp.StartMCPServer()
 		if err != nil {
-			log.Fatalf("Failed to start MCP server: %v", err)
+			cmdLogger.ErrorContext(ctx, "failed to start MCP server",
+				"error", err,
+			)
+			os.Exit(1)
 		}
 	},
 }
@@ -29,6 +38,10 @@ var cvCmd = &cobra.Command{
 
 This command displays CV data in markdown format via the MCP server.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
+		cmdLogger.InfoContext(ctx, "cv command executed - MCP server required",
+			"instruction", "run: vibecheck mcp-server",
+		)
 		fmt.Println("CV data is available via the MCP server. Run: vibecheck mcp-server")
 	},
 }
