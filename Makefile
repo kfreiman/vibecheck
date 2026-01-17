@@ -1,4 +1,4 @@
-.PHONY: all build run test clean deps init-storage docker-build docker-run docker-logs
+.PHONY: all build run test clean deps init-storage docker-build docker-run docker-logs lint format docker-build-dev
 
 # Build the project
 build:
@@ -11,6 +11,20 @@ run: build
 # Run tests
 test:
 	go test ./... -v
+
+# Run tests with coverage
+test-cover:
+	go test ./... -coverprofile=coverage.out -covermode=atomic
+	go tool cover -func=coverage.out
+
+# Lint code
+lint:
+	golangci-lint run ./...
+
+# Format code
+fmt:
+	go fmt ./...
+	go mod tidy
 
 # Clean build artifacts
 clean:
@@ -36,25 +50,25 @@ install-tools:
 dev: install-tools
 	go tool air mcp-server
 
-# Format code
-fmt:
-	go fmt ./...
-
-# Lint code
-lint:
-	golangci-lint run ./...
-
 # Run the CLI
 cli: build
 	./vibecheck --help
 
-# Docker: Build the image
+# Docker: Build production image
 docker-build:
-	docker compose -f compose.dev.yaml build
+	docker compose -f compose.yaml build
 
-# Docker: Run the MCP server
+# Docker: Build development image
+docker-build-dev:
+	docker compose -f compose.yaml -f compose.dev.yaml build
+
+# Docker: Run the MCP server (production)
 docker-run:
-	docker compose -f compose.dev.yaml up
+	docker compose -f compose.yaml up
+
+# Docker: Run development server
+docker-run-dev:
+	docker compose -f compose.yaml -f compose.dev.yaml up
 
 # Docker: Run in background
 docker-up:
