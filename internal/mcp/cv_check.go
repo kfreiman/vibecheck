@@ -12,11 +12,11 @@ import (
 
 const (
 	// Prompt parameter names - content-based
-	CVContentParam   = "cv_content"
-	JobContentParam  = "job_content"
+	CVContentParam  = "cv_content"
+	JobContentParam = "job_content"
 	// Prompt parameter names - URL-based
-	CVURLParam       = "cv_url"
-	JobURLParam      = "job_url"
+	CVURLParam  = "cv_url"
+	JobURLParam = "job_url"
 	// Prompt parameter names - filepath-based
 	CVFilepathParam  = "cv_filepath"
 	JobFilepathParam = "job_filepath"

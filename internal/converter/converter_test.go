@@ -42,7 +42,7 @@ func TestParseInput_Text(t *testing.T) {
 
 func TestIsSupportedExtension(t *testing.T) {
 	tests := []struct {
-		ext      string
+		ext       string
 		supported bool
 	}{
 		{".pdf", true},
@@ -65,7 +65,7 @@ func TestIsSupportedExtension(t *testing.T) {
 
 func TestIsMarkdownFile(t *testing.T) {
 	tests := []struct {
-		ext     string
+		ext        string
 		isMarkdown bool
 	}{
 		{".md", true},

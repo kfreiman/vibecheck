@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/kfreiman/vibecheck/internal/storage"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // AnalyzeFitPrompt handles the analyze_fit prompt
@@ -141,11 +141,11 @@ Use cv:// and jd:// resources.`, cvURI, jdURI)
 
 // AnalysisOutput represents structured analysis results from LLM
 type AnalysisOutput struct {
-	MatchPercentage    int      `json:"match_percentage"`
-	TechnicalGaps      []string `json:"technical_gaps"`
-	EvidenceQuestions  []string `json:"evidence_questions"`
-	KeyStrengths       []string `json:"key_strengths"`
-	Recommendations    []string `json:"recommendations"`
+	MatchPercentage   int      `json:"match_percentage"`
+	TechnicalGaps     []string `json:"technical_gaps"`
+	EvidenceQuestions []string `json:"evidence_questions"`
+	KeyStrengths      []string `json:"key_strengths"`
+	Recommendations   []string `json:"recommendations"`
 }
 
 // ExtractSections extracts structured sections from LLM response

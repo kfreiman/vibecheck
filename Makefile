@@ -1,4 +1,4 @@
-.PHONY: all build run test clean deps init-storage docker-build docker-run docker-logs lint format docker-build-dev
+.PHONY: all build run test lint format clean deps init-storage docker-build docker-build-dev docker-run docker-run-dev docker-up docker-down docker-logs test-cover cli
 
 # Build the project
 build:
@@ -8,7 +8,7 @@ build:
 run: build
 	./vibecheck mcp-server
 
-# Run tests
+# Run tests (CI-friendly, quiet mode)
 test:
 	go test ./... -v
 
@@ -21,10 +21,11 @@ test-cover:
 lint:
 	golangci-lint run ./...
 
-# Format code
-fmt:
+# Format code (check only, CI-friendly)
+format:
 	go fmt ./...
 	go mod tidy
+	@git diff --exit-code || echo "Run 'make format' to fix formatting issues"
 
 # Clean build artifacts
 clean:
@@ -54,7 +55,7 @@ dev: install-tools
 cli: build
 	./vibecheck --help
 
-# Docker: Build production image
+# Docker: Build production image (CI-friendly)
 docker-build:
 	docker compose -f compose.yaml build
 

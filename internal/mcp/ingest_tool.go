@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/kfreiman/vibecheck/internal/converter"
 	"github.com/kfreiman/vibecheck/internal/storage"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // IngestDocumentTool handles document ingestion

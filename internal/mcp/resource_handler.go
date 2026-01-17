@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/kfreiman/vibecheck/internal/storage"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // StorageResourceHandler handles cv:// and jd:// resource requests

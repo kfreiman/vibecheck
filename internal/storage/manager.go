@@ -53,8 +53,8 @@ var logger = slog.New(slogzerolog.Option{}.NewZerologHandler())
 
 // StorageConfig holds configuration for the storage manager
 type StorageConfig struct {
-	BasePath    string
-	DefaultTTL  time.Duration
+	BasePath   string
+	DefaultTTL time.Duration
 }
 
 // StorageManager handles document storage with UUID-based naming

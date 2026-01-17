@@ -25,10 +25,10 @@ func NewInterviewQuestionsTool(storageManager *storage.StorageManager) *Intervie
 func (t *InterviewQuestionsTool) Call(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	// Parse arguments
 	var args struct {
-		CVURI   string `json:"cv_uri"`   // URI of ingested CV (cv://[uuid])
-		JDURI   string `json:"jd_uri"`   // URI of ingested job description (jd://[uuid])
-		Style   string `json:"style"`    // Optional: "technical", "behavioral", or "comprehensive" (default)
-		Count   int    `json:"count"`    // Optional: number of questions (default: 5)
+		CVURI string `json:"cv_uri"` // URI of ingested CV (cv://[uuid])
+		JDURI string `json:"jd_uri"` // URI of ingested job description (jd://[uuid])
+		Style string `json:"style"`  // Optional: "technical", "behavioral", or "comprehensive" (default)
+		Count int    `json:"count"`  // Optional: number of questions (default: 5)
 	}
 
 	if err := json.Unmarshal(request.Params.Arguments, &args); err != nil {
