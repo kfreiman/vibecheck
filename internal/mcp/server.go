@@ -13,12 +13,13 @@ import (
 	"github.com/kfreiman/vibecheck/internal/converter"
 	"github.com/kfreiman/vibecheck/internal/storage"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/samber/slog-zerolog"
+	slogzerolog "github.com/samber/slog-zerolog"
 )
 
 var logger = slog.New(slogzerolog.Option{}.NewZerologHandler())
 
 // CVResourceHandler handles CV resource requests
+// Hot reload test comment - this should trigger air rebuild
 type CVResourceHandler struct{}
 
 // ReadResource processes resource requests for CV data
@@ -126,6 +127,7 @@ func StartMCPServer() error {
 	cvCheckTool, _ := NewCVCheckTool()
 	analyzeFitPrompt := NewAnalyzeFitPrompt(storageManager)
 	interviewQuestionsTool := NewInterviewQuestionsTool(storageManager)
+	analyzeTool := NewAnalyzeTool(storageManager)
 
 	// Create MCP server
 	impl := &mcp.Implementation{
@@ -204,6 +206,21 @@ Returns a prompt for generating interview questions focused on:
 - Skills/experience gaps between CV and JD
 - Areas needing clarification
 - Technical and behavioral question balance
+
+### analyze_cv_jd
+Structured CV/Job Description analysis with BM25 match scoring.
+Parameters:
+- cv_uri: URI of ingested CV (cv://[uuid])
+- jd_uri: URI of ingested job description (jd://[uuid])
+
+Example: {"cv_uri": "cv://550e8400-e29b...", "jd_uri": "jd://550e8400-e29b..."}
+
+Returns structured JSON with:
+- match_percentage: 0-100% based on BM25 scoring
+- skill_coverage: Ratio of JD terms present in CV
+- top_skills: Common terms with highest scores
+- missing_skills: JD terms not found in CV
+- analysis_summary: Human-readable report
 
 ## Prompts
 
@@ -369,6 +386,26 @@ Returns structured analysis with:
 			"required": []string{"cv_uri", "jd_uri"},
 		},
 	}, interviewQuestionsTool.Call)
+
+	// analyze_cv_jd tool (BM25-based structured analysis)
+	server.AddTool(&mcp.Tool{
+		Name:        "analyze_cv_jd",
+		Description: "Structured CV/Job Description analysis with BM25 match scoring. Returns match percentage, skill coverage, and gap analysis.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"cv_uri": map[string]interface{}{
+					"type":        "string",
+					"description": "URI of ingested CV (cv://[uuid])",
+				},
+				"jd_uri": map[string]interface{}{
+					"type":        "string",
+					"description": "URI of ingested job description (jd://[uuid])",
+				},
+			},
+			"required": []string{"cv_uri", "jd_uri"},
+		},
+	}, analyzeTool.Call)
 
 	// Register prompts
 
