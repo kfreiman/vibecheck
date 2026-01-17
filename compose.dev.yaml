@@ -1,16 +1,28 @@
 services:
   vibecheck:
+    container_name: vibecheck-dev
     build:
+      context: .
       dockerfile: docker/Dockerfile.dev
     volumes:
-      # Mount source code for hot reload
+      # Mount source code for hot reload (air watches these files)
       - .:/app
       # Persistent storage for development
       - ./storage:/app/storage
     working_dir: /app
     environment:
-      # Development environment variables
-      VIBECHECK_STORAGE_PATH: ${VIBECHECK_STORAGE_PATH:-./storage}
+      # Storage configuration
+      VIBECHECK_STORAGE_PATH: ${VIBECHECK_STORAGE_PATH:-/app/storage}
       VIBECHECK_STORAGE_TTL: ${VIBECHECK_STORAGE_TTL:-24h}
-      # Debug mode
-      DEBUG: ${DEBUG:-1}
+      # Debug mode (1 = enabled, 0 = disabled)
+      VIBECHECK_DEBUG: ${VIBECHECK_DEBUG:-1}
+      # Go runtime for development
+      GODEBUG: ${GODEBUG:-}
+    ports:
+      - ${VIBECHECK_MCP_PORT:-8080}:8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
