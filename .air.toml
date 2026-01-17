@@ -11,7 +11,8 @@ bin = "./tmp/main"
 cmd = "go build -o ./tmp/main ."
 # Delay before rebuild (in milliseconds) - 200ms is good for Docker volume mounts
 delay = 200
-entrypoint = ["./tmp/main"]
+# Entrypoint with mcp-server command for hot reload
+entrypoint = ["./tmp/main", "mcp-server"]
 # Exclude directories that don't need watching
 exclude_dir = ["assets", "tmp", "vendor", "testdata", ".git"]
 exclude_file = []

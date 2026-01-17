@@ -1,6 +1,6 @@
 services:
   vibecheck:
-    container_name: vibecheck-dev
+    container_name: vibecheck_dev
     build:
       context: .
       dockerfile: docker/Dockerfile.dev
