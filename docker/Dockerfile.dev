@@ -1,21 +1,29 @@
-# Modules caching
+# Stage 1: Download modules
 FROM golang:1.25-bookworm AS modules
-ARG DIR
-WORKDIR ${DIR}
-
-COPY go.mod go.sum ${DIR}/
+WORKDIR /app
+COPY go.mod go.sum ./
 RUN go mod download
 
-# Builder
+# Stage 2: Development builder with air, playwright, and playwright browser binaries
 FROM golang:1.25-bookworm AS builder
+WORKDIR /app
 
-RUN go install github.com/air-verse/air@latest
+# Copy modules from cache
+COPY --from=modules /go/pkg/mod /go/pkg/mod
+COPY --from=modules /go/pkg/sumdb /go/pkg/sumdb
 
-
-ARG DIR
-WORKDIR ${DIR}
-
+# Copy source code (this will be mounted as volume for hot reload)
 COPY . .
 
+# Install air tool for hot reloading
+RUN go install github.com/air-verse/air@latest
+
+# Install playwright-go tool and browser binaries for development testing
+RUN go install github.com/playwright-community/playwright-go/cmd/playwright@latest && \
+    playwright install chromium
+
+# Environment flags
 ENV GOFLAGS="-buildvcs=false"
+
+# Entrypoint runs air with .air.toml config
 ENTRYPOINT ["air", "-c", ".air.toml"]
