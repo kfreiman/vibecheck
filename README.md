@@ -1,5 +1,15 @@
 # VibeCheck - Production-Grade MCP CV Analysis Server
 
+[
+![CI](https://github.com/kfreiman/vibecheck/actions/workflows/ci.yml/badge.svg)
+](https://github.com/kfreiman/vibecheck/actions/workflows/ci.yml)
+[
+![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)
+](https://go.dev/doc/devenv)
+[
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+](https://opensource.org/licenses/MIT)
+
 A production-grade MCP (Model Context Protocol) server for ingesting CVs and job descriptions, with intelligent analysis capabilities.
 
 ## Features
