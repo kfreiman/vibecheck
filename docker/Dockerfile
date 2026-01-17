@@ -10,7 +10,6 @@ WORKDIR /app
 
 # Copy modules from cache
 COPY --from=modules /go/pkg/mod /go/pkg/mod
-COPY --from=modules /go/pkg/sumdb /go/pkg/sumdb
 
 # Copy source code
 COPY . .
