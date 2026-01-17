@@ -2,7 +2,15 @@ services:
   vibecheck:
     build:
       dockerfile: docker/Dockerfile.dev
-      args:
-        DIR: ${PWD} # for better links to source in logs
     volumes:
-      - ${PWD}:${PWD}
+      # Mount source code for hot reload
+      - .:/app
+      # Persistent storage for development
+      - ./storage:/app/storage
+    working_dir: /app
+    environment:
+      # Development environment variables
+      VIBECHECK_STORAGE_PATH: ${VIBECHECK_STORAGE_PATH:-./storage}
+      VIBECHECK_STORAGE_TTL: ${VIBECHECK_STORAGE_TTL:-24h}
+      # Debug mode
+      DEBUG: ${DEBUG:-1}
