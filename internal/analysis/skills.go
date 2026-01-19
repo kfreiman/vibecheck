@@ -41,7 +41,8 @@ func NewSkillsDictionary() *SkillsDictionary {
 // loadDictionary loads skills from the dictionary file
 func (sd *SkillsDictionary) loadDictionary() {
 	sd.once.Do(func() {
-		dictPath := filepath.Join("testdata", "skills_dictionary.txt")
+		// Navigate from internal/analysis to project root (testdata/)
+		dictPath := filepath.Join("..", "..", "testdata", "skills_dictionary.txt")
 		file, err := os.Open(dictPath)
 		if err != nil {
 			slog.Warn("failed to load skills dictionary, using empty dict",
@@ -57,13 +58,18 @@ func (sd *SkillsDictionary) loadDictionary() {
 
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
-			if line == "" || strings.HasPrefix(line, "#") {
+			if line == "" {
 				continue
 			}
 
 			// Check if it's a category header (e.g., "# Programming Languages")
 			if strings.HasPrefix(line, "# ") {
 				currentCategory = strings.TrimSpace(line[2:])
+				continue
+			}
+
+			// Skip regular comments
+			if strings.HasPrefix(line, "#") {
 				continue
 			}
 
@@ -141,6 +147,7 @@ func ExtractSkills(ctx context.Context, content string, dict *SkillsDictionary) 
 
 // tokenizeContent splits content into words/tokens
 func tokenizeContent(content string) []string {
+	content = strings.ToLower(content)
 	// Split by common delimiters
 	delimiters := []string{",", ";", ".", ":", "(", ")", "[", "]", "{", "}", " ", "\n", "\t"}
 	for _, delim := range delimiters {
@@ -163,7 +170,7 @@ func tokenizeContent(content string) []string {
 		"that": true, "this": true, "it": true, "its": true, "their": true,
 		"them": true, "they": true, "we": true, "our": true, "you": true,
 		"your": true, "he": true, "she": true, "his": true, "her": true,
-		"i": true, "me": true, "my": true,
+		"i": true, "me": true, "my": true, "or": true,
 	}
 
 	for _, word := range rawWords {
@@ -208,14 +215,6 @@ func calculateConfidence(skill, content string) float64 {
 // extractExperience extracts years of experience for a skill
 // Looks for patterns like "5 years of Go experience" or "Go (3 years)"
 func extractExperience(skill, content string) int {
-	// Search for patterns around the skill
-	searchPatterns := []string{
-		"%d years of %s",
-		"%s with %d years",
-		"%s (%d years)",
-		"%d+ year%s %s",
-	}
-
 	// Extract numeric patterns near the skill
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
@@ -225,14 +224,23 @@ func extractExperience(skill, content string) int {
 				words := strings.Fields(line)
 				for i, word := range words {
 					if word == skill {
-						// Check previous word for number
-						if i > 0 {
-							if years := parseInt(words[i-1]); years > 0 {
+						// Check previous few words for number
+						// Pattern: "5 years of go", "go with 3 years"
+						start := i - 5
+						if start < 0 {
+							start = 0
+						}
+						for k := start; k < i; k++ {
+							if years := parseInt(words[k]); years > 0 {
 								return years
 							}
 						}
 						// Check next few words
-						for j := i + 1; j < i+5 && j < len(words); j++ {
+						end := i + 5
+						if end > len(words) {
+							end = len(words)
+						}
+						for j := i + 1; j < end; j++ {
 							if years := parseInt(words[j]); years > 0 {
 								return years
 							}
@@ -311,13 +319,13 @@ func CalculateSkillCoverage(cvSkills, jdSkills []Skill) float64 {
 		return 0.0
 	}
 
-	matches, _, _ := MatchSkills(cvSkills, jdSkills, nil)
+	matches, _, _ := MatchSkills(cvSkills, jdSkills)
 	return float64(len(matches)) / float64(len(jdSkills))
 }
 
 // LoadSkillsDictionary loads skills dictionary from file
 func LoadSkillsDictionary() ([]string, error) {
-	dictPath := filepath.Join("testdata", "skills_dictionary.txt")
+	dictPath := filepath.Join("..", "..", "testdata", "skills_dictionary.txt")
 	file, err := os.Open(dictPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open skills dictionary: %w", err)
