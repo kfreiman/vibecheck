@@ -22,11 +22,15 @@ type TermScore struct {
 
 // AnalysisResult contains structured analysis output
 type AnalysisResult struct {
-	MatchPercentage int         `json:"match_percentage"`
-	SkillCoverage   float64     `json:"skill_coverage"`
-	TopSkills       []string    `json:"top_skills"`
-	MissingSkills   []string    `json:"missing_skills"`
-	CommonTerms     []TermScore `json:"common_terms"`
+	MatchPercentage  int            `json:"match_percentage"`
+	WeightedScore    int            `json:"weighted_score"`
+	SkillCoverage    float64        `json:"skill_coverage"`
+	ExperienceMatch  float64        `json:"experience_match"`
+	TopSkills        []string       `json:"top_skills"`
+	MissingSkills    []string       `json:"missing_skills"`
+	PresentSkills    []string       `json:"present_skills"`
+	CommonTerms      []TermScore    `json:"common_terms"`
+	ScoringBreakdown *ScoreBreakdown `json:"scoring_breakdown"`
 }
 
 // AnalysisEngine uses bleve BM25 for CV/JD matching
@@ -69,9 +73,9 @@ func (e *AnalysisEngine) createTemporaryIndex(docID, content string) (bleve.Inde
 	return index, nil
 }
 
-// Analyze performs BM25-based analysis between CV and JD
+// Analyze performs BM25-based analysis between CV and JD with skill extraction
 func (e *AnalysisEngine) Analyze(ctx context.Context, cvContent, jdContent string) (*AnalysisResult, error) {
-	logger.DebugContext(ctx, "starting BM25 analysis",
+	logger.DebugContext(ctx, "starting BM25 analysis with skill extraction",
 		"cv_length", len(cvContent),
 		"jd_length", len(jdContent),
 	)
@@ -104,14 +108,57 @@ func (e *AnalysisEngine) Analyze(ctx context.Context, cvContent, jdContent strin
 	cvTerms := extractTermFrequenciesFromIndex(bleveIndex, "cv")
 	jdTerms := extractTermFrequenciesFromIndex(bleveIndex, "jd")
 
+	// Extract skills using dictionary-based matching
+	skillsDict := NewSkillsDictionary()
+	cvSkills := ExtractSkills(ctx, cvClean, skillsDict)
+	jdSkills := ExtractSkills(ctx, jdClean, skillsDict)
+
 	// Calculate match metrics using BM25 scores
 	result := e.calculateMatchMetrics(cvTerms, jdTerms)
 
+	// Calculate skill-based metrics
+	skillCoverage := CalculateSkillCoverage(cvSkills, jdSkills)
+	experienceMatch := CalculateExperienceMatch(cvSkills, jdSkills)
+
+	// Calculate term similarity from BM25 (normalized 0-1)
+	termSimilarity := 0.0
+	if len(jdTerms) > 0 {
+		termSimilarity = float64(result.MatchPercentage) / 100.0
+	}
+
+	// Calculate overall match from BM25 (normalized 0-1)
+	overallMatch := float64(result.MatchPercentage) / 100.0
+
+	// Calculate weighted score using default weights
+	weightedScore, breakdown := CalculateWeightedScore(
+		skillCoverage,
+		experienceMatch,
+		termSimilarity,
+		overallMatch,
+		NewDefaultWeights(),
+	)
+
+	// Update result with skill-based metrics
+	result.WeightedScore = weightedScore
+	result.ExperienceMatch = experienceMatch
+	result.SkillCoverage = skillCoverage
+	result.ScoringBreakdown = breakdown
+
+	// Add present skills (skills that CV has that JD needs)
+	presentSkills := make([]string, 0, len(cvSkills))
+	for _, skill := range cvSkills {
+		presentSkills = append(presentSkills, skill.Name)
+	}
+	result.PresentSkills = presentSkills
+
 	logger.DebugContext(ctx, "BM25 analysis complete",
 		"match_percentage", result.MatchPercentage,
+		"weighted_score", result.WeightedScore,
 		"skill_coverage", result.SkillCoverage,
-		"top_terms", len(result.TopSkills),
-		"missing_terms", len(result.MissingSkills),
+		"experience_match", result.ExperienceMatch,
+		"top_skills", len(result.TopSkills),
+		"missing_skills", len(result.MissingSkills),
+		"present_skills", len(result.PresentSkills),
 	)
 
 	return result, nil
