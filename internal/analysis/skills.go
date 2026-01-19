@@ -313,15 +313,6 @@ func MatchSkills(cvSkills, jdSkills []Skill) (matches []Skill, missing []Skill, 
 	return matches, missing, partialMatches
 }
 
-// CalculateSkillCoverage calculates skill coverage percentage
-func CalculateSkillCoverage(cvSkills, jdSkills []Skill) float64 {
-	if len(jdSkills) == 0 {
-		return 0.0
-	}
-
-	matches, _, _ := MatchSkills(cvSkills, jdSkills)
-	return float64(len(matches)) / float64(len(jdSkills))
-}
 
 // LoadSkillsDictionary loads skills dictionary from file
 func LoadSkillsDictionary() ([]string, error) {

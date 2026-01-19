@@ -237,7 +237,7 @@ func TestMatchSkills_EmptyInputs(t *testing.T) {
 	}
 }
 
-func TestCalculateSkillCoverage(t *testing.T) {
+func TestCalculateSkillCoverage_Skills(t *testing.T) {
 	tests := []struct {
 		cvSkills  []Skill
 		jdSkills  []Skill
