@@ -66,6 +66,7 @@ completed: 2026-01-17
 - **Files modified:** 6
 
 ## Accomplishments
+
 - Created analysis package with bleve BM25 scoring engine
 - Implemented structured analysis returning match percentage 0-100%
 - Added MCP tool for CV/JD comparison with JSON output
@@ -83,6 +84,7 @@ completed: 2026-01-17
 **Plan metadata:** `b49b06a` (docs: complete 05-01 plan)
 
 ## Files Created/Modified
+
 - `internal/analysis/engine.go` - Bleve-based analysis engine with BM25 scoring
 - `internal/analysis/engine_test.go` - 15 comprehensive test scenarios
 - `internal/mcp/analyze_tool.go` - MCP tool for structured analysis
@@ -92,6 +94,7 @@ completed: 2026-01-17
 - `internal/mcp/server.go` - Registered analyze_cv_jd tool
 
 ## Decisions Made
+
 - Used bleve v2.5.7 BM25 scoring (no custom vector implementation)
 - Strip YAML frontmatter from storage documents before analysis
 - Return structured JSON (not text prompts) to separate algorithm from LLM
@@ -103,6 +106,7 @@ completed: 2026-01-17
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Fixed bleve v2 API compatibility**
+
 - **Found during:** Task 3 (Analysis engine implementation)
 - **Issue:** Existing code used bleve v1 API (bleve.Document, TermVectors) which doesn't exist in v2.5.7
 - **Fix:** Updated to use bleve v2 API:
@@ -115,6 +119,7 @@ completed: 2026-01-17
 - **Committed in:** `363f8aa` (Task 1)
 
 **2. [Rule 2 - Missing Critical] Frontmatter stripping**
+
 - **Found during:** Task 4 (MCP tool implementation)
 - **Issue:** Storage documents contain YAML frontmatter (id, original_filename, ingested_at, type), causing false analysis results
 - **Fix:** Added `stripFrontmatter()` regex to remove `---\n...\n---` before analysis
@@ -123,6 +128,7 @@ completed: 2026-01-17
 - **Committed in:** `e69e5e7` (Task 4)
 
 **3. [Rule 1 - Bug] Unused import removal**
+
 - **Found during:** Task 5 (Server registration)
 - **Issue:** server.go imported analysis package but didn't use it directly (tools use it indirectly)
 - **Fix:** Removed unused import to prevent compilation warnings
@@ -136,10 +142,12 @@ completed: 2026-01-17
 **Impact on plan:** All auto-fixes necessary for correct operation. No scope creep.
 
 ## Issues Encountered
+
 - **Bleve v2 API mismatch:** Had to adapt existing analysis code to current bleve v2.5.7 API (vs v1 which was referenced in plan)
 - **Storage document format:** Documents stored with YAML frontmatter required extraction before analysis
 
 ## Next Phase Readiness
+
 - ✅ Analysis engine ready for integration with other tools
 - ✅ MCP tool registered and discoverable
 - ✅ All tests passing (analysis: 15/15, mcp: 13/13)

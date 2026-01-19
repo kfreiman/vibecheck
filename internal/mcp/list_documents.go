@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/kfreiman/vibecheck/internal/storage"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -12,13 +13,21 @@ import (
 // ListDocumentsTool handles listing all stored documents
 type ListDocumentsTool struct {
 	storageManager *storage.StorageManager
+	logger         *slog.Logger
 }
 
 // NewListDocumentsTool creates a new list documents tool
 func NewListDocumentsTool(storageManager *storage.StorageManager) *ListDocumentsTool {
 	return &ListDocumentsTool{
 		storageManager: storageManager,
+		logger:         slog.Default(),
 	}
+}
+
+// WithLogger sets the logger for the tool
+func (t *ListDocumentsTool) WithLogger(logger *slog.Logger) *ListDocumentsTool {
+	t.logger = logger
+	return t
 }
 
 // Call implements the MCP tool interface

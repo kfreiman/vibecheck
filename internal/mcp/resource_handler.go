@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/kfreiman/vibecheck/internal/storage"
@@ -11,13 +12,21 @@ import (
 // StorageResourceHandler handles cv:// and jd:// resource requests
 type StorageResourceHandler struct {
 	storageManager *storage.StorageManager
+	logger         *slog.Logger
 }
 
 // NewStorageResourceHandler creates a new storage resource handler
 func NewStorageResourceHandler(storageManager *storage.StorageManager) *StorageResourceHandler {
 	return &StorageResourceHandler{
 		storageManager: storageManager,
+		logger:         slog.Default(),
 	}
+}
+
+// WithLogger sets the logger for the handler
+func (h *StorageResourceHandler) WithLogger(logger *slog.Logger) *StorageResourceHandler {
+	h.logger = logger
+	return h
 }
 
 // ReadResource processes resource requests for stored documents
@@ -27,12 +36,20 @@ func (h *StorageResourceHandler) ReadResource(ctx context.Context, req *mcp.Read
 	// Parse the URI
 	_, _, err := storage.ParseURI(uri)
 	if err != nil {
+		h.logger.DebugContext(ctx, "failed to parse URI",
+			"uri", uri,
+			"error", err,
+		)
 		return nil, mcp.ResourceNotFoundError(uri)
 	}
 
 	// Read the document
 	content, err := h.storageManager.ReadDocument(uri)
 	if err != nil {
+		h.logger.DebugContext(ctx, "failed to read document",
+			"uri", uri,
+			"error", err,
+		)
 		return nil, mcp.ResourceNotFoundError(uri)
 	}
 
@@ -46,6 +63,11 @@ func (h *StorageResourceHandler) ReadResource(ctx context.Context, req *mcp.Read
 			textContent = textContent[frontmatterStart+4+frontmatterEnd+4:]
 		}
 	}
+
+	h.logger.DebugContext(ctx, "read document resource",
+		"uri", uri,
+		"size", len(content),
+	)
 
 	return &mcp.ReadResourceResult{
 		Contents: []*mcp.ResourceContents{{

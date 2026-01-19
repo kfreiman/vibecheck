@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kfreiman/vibecheck/internal/ingest"
 	"github.com/kfreiman/vibecheck/internal/storage"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -47,8 +48,11 @@ func TestIngestIntegration(t *testing.T) {
 	assert.Equal(t, int64(0), cvCount, "Should start with 0 CVs")
 	assert.Equal(t, int64(0), jdCount, "Should start with 0 JDs")
 
+	// Create ingestor
+	ingestor := ingest.NewIngestor(storageManager, nil)
+
 	// Create ingest tool
-	ingestTool := NewIngestDocumentTool(storageManager, nil)
+	ingestTool := NewIngestDocumentTool(ingestor)
 
 	// Test 1: Ingest CV with raw text
 	t.Run("IngestCVRawText", func(t *testing.T) {
@@ -192,8 +196,11 @@ func TestMCPServerIngest(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Create ingestor
+	ingestor := ingest.NewIngestor(storageManager, nil)
+
 	// Create handlers like the server does
-	ingestTool := NewIngestDocumentTool(storageManager, nil)
+	ingestTool := NewIngestDocumentTool(ingestor)
 	cleanupTool := NewCleanupStorageTool(storageManager)
 	storageHandler := NewStorageResourceHandler(storageManager)
 

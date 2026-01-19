@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 )
@@ -128,28 +127,6 @@ func (e *RetryableError) Unwrap() error {
 	return e.Err
 }
 
-// DegradedError represents a non-critical error that allows graceful degradation
-type DegradedError struct {
-	Component string
-	Err       error
-	Fallback  string
-}
-
-func (e *DegradedError) Error() string {
-	msg := fmt.Sprintf("degraded operation in %s", e.Component)
-	if e.Err != nil {
-		msg += fmt.Sprintf(": %v", e.Err)
-	}
-	if e.Fallback != "" {
-		msg += fmt.Sprintf(" (using fallback: %s)", e.Fallback)
-	}
-	return msg
-}
-
-func (e *DegradedError) Unwrap() error {
-	return e.Err
-}
-
 // IsRetryable checks if an error is retryable
 func IsRetryable(err error) bool {
 	if err == nil {
@@ -167,24 +144,11 @@ func IsRetryable(err error) bool {
 	case *ConversionError:
 		// Don't retry conversion errors (usually deterministic)
 		return false
-	case *DegradedError:
-		// Degraded errors are not retryable (they already succeeded with fallback)
-		return false
 	default:
 		// Check wrapped errors
-		unwrapped := errors.Unwrap(err)
-		if unwrapped != nil {
-			return IsRetryable(unwrapped)
+		if err, ok := err.(interface{ Unwrap() error }); ok {
+			return IsRetryable(err.Unwrap())
 		}
 		return false
 	}
-}
-
-// IsDegraded checks if an error allows graceful degradation
-func IsDegraded(err error) bool {
-	if err == nil {
-		return false
-	}
-	_, ok := err.(*DegradedError)
-	return ok
 }

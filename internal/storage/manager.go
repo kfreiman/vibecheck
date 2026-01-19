@@ -4,13 +4,12 @@ import (
 	"context"
 	"crypto/sha1"
 	"fmt"
+	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samber/slog-zerolog"
 )
 
 // StorageError represents a storage-related failure
@@ -49,18 +48,20 @@ const (
 	DocumentTypeJD DocumentType = "jd"
 )
 
-var logger = slog.New(slogzerolog.Option{}.NewZerologHandler())
-
 // StorageConfig holds configuration for the storage manager
 type StorageConfig struct {
 	BasePath   string
 	DefaultTTL time.Duration
+	Logger     *slog.Logger // Optional: custom logger (defaults to slog zerolog)
+	FileSystem FileSystem   // Optional: custom filesystem (defaults to OS filesystem)
 }
 
 // StorageManager handles document storage with UUID-based naming
 type StorageManager struct {
 	basePath   string
 	defaultTTL time.Duration
+	logger     *slog.Logger
+	fs         FileSystem
 }
 
 // NewStorageManager creates a new storage manager
@@ -75,13 +76,21 @@ func NewStorageManager(config StorageConfig) (*StorageManager, error) {
 		config.DefaultTTL = 24 * time.Hour
 	}
 
+	if config.FileSystem == nil {
+		config.FileSystem = NewOSFileSystem()
+	}
+
+	if config.Logger == nil {
+		config.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
 	// Create directory structure
 	cvPath := filepath.Join(config.BasePath, string(DocumentTypeCV))
 	jdPath := filepath.Join(config.BasePath, string(DocumentTypeJD))
 
 	for _, path := range []string{cvPath, jdPath} {
-		if err := os.MkdirAll(path, 0755); err != nil {
-			logger.ErrorContext(ctx, "failed to create storage directory",
+		if err := config.FileSystem.MkdirAll(path, 0755); err != nil {
+			config.Logger.ErrorContext(ctx, "failed to create storage directory",
 				"error", err,
 				"path", path,
 				"operation", "init",
@@ -94,7 +103,7 @@ func NewStorageManager(config StorageConfig) (*StorageManager, error) {
 		}
 	}
 
-	logger.InfoContext(ctx, "storage manager initialized",
+	config.Logger.InfoContext(ctx, "storage manager initialized",
 		"base_path", config.BasePath,
 		"default_ttl", config.DefaultTTL,
 	)
@@ -102,6 +111,8 @@ func NewStorageManager(config StorageConfig) (*StorageManager, error) {
 	return &StorageManager{
 		basePath:   config.BasePath,
 		defaultTTL: config.DefaultTTL,
+		logger:     config.Logger,
+		fs:         config.FileSystem,
 	}, nil
 }
 
@@ -137,9 +148,9 @@ func (sm *StorageManager) SaveDocument(docType DocumentType, content []byte, ori
 	path := filepath.Join(sm.GetPath(docType), filename)
 
 	// Check if exists
-	if _, err := os.Stat(path); err == nil {
+	if _, err := sm.fs.Stat(path); err == nil {
 		// File already exists, return existing URI
-		logger.DebugContext(ctx, "document already exists (deduplication)",
+		sm.logger.DebugContext(ctx, "document already exists (deduplication)",
 			"doc_type", docType,
 			"id", id,
 			"path", path,
@@ -158,8 +169,8 @@ type: %s
 
 	fullContent := frontmatter + string(content)
 
-	if err := os.WriteFile(path, []byte(fullContent), 0644); err != nil {
-		logger.ErrorContext(ctx, "failed to save document",
+	if err := sm.fs.WriteFile(path, []byte(fullContent), 0644); err != nil {
+		sm.logger.ErrorContext(ctx, "failed to save document",
 			"error", err,
 			"doc_type", docType,
 			"id", id,
@@ -173,7 +184,7 @@ type: %s
 		}
 	}
 
-	logger.InfoContext(ctx, "document saved",
+	sm.logger.InfoContext(ctx, "document saved",
 		"doc_type", docType,
 		"id", id,
 		"path", path,
@@ -198,7 +209,7 @@ func (sm *StorageManager) GetDocumentPath(uri string) (string, error) {
 
 	// Find file with any extension
 	dir := sm.GetPath(docType)
-	entries, err := os.ReadDir(dir)
+	entries, err := sm.fs.ReadDir(dir)
 	if err != nil {
 		return "", &StorageError{
 			Operation: "read directory",
@@ -256,7 +267,7 @@ func (sm *StorageManager) ReadDocument(uri string) ([]byte, error) {
 	ctx := context.Background()
 	path, err := sm.GetDocumentPath(uri)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to get document path",
+		sm.logger.ErrorContext(ctx, "failed to get document path",
 			"error", err,
 			"uri", uri,
 			"operation", "read",
@@ -264,9 +275,9 @@ func (sm *StorageManager) ReadDocument(uri string) ([]byte, error) {
 		return nil, err
 	}
 
-	content, err := os.ReadFile(path)
+	content, err := sm.fs.ReadFile(path)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to read document",
+		sm.logger.ErrorContext(ctx, "failed to read document",
 			"error", err,
 			"path", path,
 			"uri", uri,
@@ -279,7 +290,7 @@ func (sm *StorageManager) ReadDocument(uri string) ([]byte, error) {
 		}
 	}
 
-	logger.DebugContext(ctx, "document read",
+	sm.logger.DebugContext(ctx, "document read",
 		"uri", uri,
 		"path", path,
 	)
@@ -293,7 +304,7 @@ func (sm *StorageManager) DocumentExists(uri string) bool {
 	if err != nil {
 		return false
 	}
-	_, err = os.Stat(path)
+	_, err = sm.fs.Stat(path)
 	return err == nil
 }
 
@@ -309,9 +320,9 @@ func (sm *StorageManager) Cleanup(ttl time.Duration) (int64, error) {
 
 	for _, docType := range []DocumentType{DocumentTypeCV, DocumentTypeJD} {
 		dir := sm.GetPath(docType)
-		entries, err := os.ReadDir(dir)
+		entries, err := sm.fs.ReadDir(dir)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to read directory for cleanup",
+			sm.logger.ErrorContext(ctx, "failed to read directory for cleanup",
 				"error", err,
 				"dir", dir,
 				"doc_type", docType,
@@ -330,14 +341,14 @@ func (sm *StorageManager) Cleanup(ttl time.Duration) (int64, error) {
 			}
 
 			if info.ModTime().Before(cutoff) {
-				if err := os.Remove(filepath.Join(dir, entry.Name())); err == nil {
+				if err := sm.fs.Remove(filepath.Join(dir, entry.Name())); err == nil {
 					removed++
 				}
 			}
 		}
 	}
 
-	logger.InfoContext(ctx, "storage cleanup completed",
+	sm.logger.InfoContext(ctx, "storage cleanup completed",
 		"removed", removed,
 		"ttl", ttl,
 	)
@@ -350,9 +361,9 @@ func (sm *StorageManager) GetStorageStats() (cvCount, jdCount int64, err error) 
 	ctx := context.Background()
 	for _, docType := range []DocumentType{DocumentTypeCV, DocumentTypeJD} {
 		dir := sm.GetPath(docType)
-		entries, err := os.ReadDir(dir)
+		entries, err := sm.fs.ReadDir(dir)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to read directory for stats",
+			sm.logger.ErrorContext(ctx, "failed to read directory for stats",
 				"error", err,
 				"dir", dir,
 				"doc_type", docType,
@@ -372,7 +383,7 @@ func (sm *StorageManager) GetStorageStats() (cvCount, jdCount int64, err error) 
 		}
 	}
 
-	logger.DebugContext(ctx, "storage stats retrieved",
+	sm.logger.DebugContext(ctx, "storage stats retrieved",
 		"cv_count", cvCount,
 		"jd_count", jdCount,
 	)
@@ -383,17 +394,17 @@ func (sm *StorageManager) GetStorageStats() (cvCount, jdCount int64, err error) 
 // IsAccessible checks if storage is accessible and directories exist
 func (sm *StorageManager) IsAccessible() bool {
 	// Check base path exists
-	if _, err := os.Stat(sm.basePath); err != nil {
+	if _, err := sm.fs.Stat(sm.basePath); err != nil {
 		return false
 	}
 	// Check cv directory
 	cvPath := sm.GetPath(DocumentTypeCV)
-	if _, err := os.Stat(cvPath); err != nil {
+	if _, err := sm.fs.Stat(cvPath); err != nil {
 		return false
 	}
 	// Check jd directory
 	jdPath := sm.GetPath(DocumentTypeJD)
-	if _, err := os.Stat(jdPath); err != nil {
+	if _, err := sm.fs.Stat(jdPath); err != nil {
 		return false
 	}
 	return true
@@ -404,9 +415,9 @@ func (sm *StorageManager) ListAllDocuments() (cvUUIDs, jdUUIDs []string, err err
 	ctx := context.Background()
 	for _, docType := range []DocumentType{DocumentTypeCV, DocumentTypeJD} {
 		dir := sm.GetPath(docType)
-		entries, err := os.ReadDir(dir)
+		entries, err := sm.fs.ReadDir(dir)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to read directory for listing",
+			sm.logger.ErrorContext(ctx, "failed to read directory for listing",
 				"error", err,
 				"dir", dir,
 				"doc_type", docType,
@@ -436,7 +447,7 @@ func (sm *StorageManager) ListAllDocuments() (cvUUIDs, jdUUIDs []string, err err
 		}
 	}
 
-	logger.DebugContext(ctx, "listed all documents",
+	sm.logger.DebugContext(ctx, "listed all documents",
 		"cv_count", len(cvUUIDs),
 		"jd_count", len(jdUUIDs),
 	)

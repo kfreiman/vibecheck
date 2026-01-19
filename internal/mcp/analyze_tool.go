@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 type AnalyzeTool struct {
 	storageManager *storage.StorageManager
 	engine         *analysis.AnalysisEngine
+	logger         *slog.Logger
 }
 
 // NewAnalyzeTool creates a new analyze tool
@@ -23,7 +25,14 @@ func NewAnalyzeTool(sm *storage.StorageManager) *AnalyzeTool {
 	return &AnalyzeTool{
 		storageManager: sm,
 		engine:         analysis.NewAnalysisEngine(),
+		logger:         slog.Default(),
 	}
+}
+
+// WithLogger sets the logger for the tool
+func (t *AnalyzeTool) WithLogger(logger *slog.Logger) *AnalyzeTool {
+	t.logger = logger
+	return t
 }
 
 // AnalyzeResult represents the structured analysis output

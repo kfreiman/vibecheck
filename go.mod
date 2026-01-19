@@ -5,17 +5,22 @@ go 1.25.1
 require (
 	codeberg.org/readeck/go-readability/v2 v2.1.0
 	github.com/blevesearch/bleve/v2 v2.5.7
+	github.com/blevesearch/bleve_index_api v1.3.0
 	github.com/google/uuid v1.6.0
+	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/klippa-app/go-pdfium v1.17.2
 	github.com/modelcontextprotocol/go-sdk v1.2.0
 	github.com/playwright-community/playwright-go v0.5200.1
+	github.com/rs/zerolog v1.30.0
 	github.com/samber/slog-zerolog v1.0.0
+	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 )
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
+	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/RoaringBitmap/roaring/v2 v2.4.5 // indirect
 	github.com/air-verse/air v1.64.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
@@ -23,7 +28,6 @@ require (
 	github.com/bep/godartsass/v2 v2.5.0 // indirect
 	github.com/bep/golibsass v1.2.0 // indirect
 	github.com/bits-and-blooms/bitset v1.22.0 // indirect
-	github.com/blevesearch/bleve_index_api v1.2.11 // indirect
 	github.com/blevesearch/geo v0.2.4 // indirect
 	github.com/blevesearch/go-faiss v1.0.26 // indirect
 	github.com/blevesearch/go-porterstemmer v1.0.3 // indirect
@@ -53,6 +57,7 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/jolestar/go-commons-pool/v2 v2.1.2 // indirect
 	github.com/json-iterator/go v0.0.0-20171115153421-f7279a603ede // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -61,9 +66,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rs/zerolog v1.30.0 // indirect
 	github.com/samber/lo v1.38.1 // indirect
-	github.com/spf13/afero v1.14.0 // indirect
 	github.com/spf13/cast v1.9.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/tdewolff/parse/v2 v2.8.3 // indirect
@@ -77,6 +80,7 @@ require (
 	golang.org/x/text v0.33.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )
 
 tool github.com/air-verse/air

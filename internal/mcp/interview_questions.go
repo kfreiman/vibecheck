@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/kfreiman/vibecheck/internal/storage"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -12,13 +13,21 @@ import (
 // InterviewQuestionsTool generates interview questions based on CV/JD gap analysis
 type InterviewQuestionsTool struct {
 	storageManager *storage.StorageManager
+	logger         *slog.Logger
 }
 
 // NewInterviewQuestionsTool creates a new interview questions tool
 func NewInterviewQuestionsTool(storageManager *storage.StorageManager) *InterviewQuestionsTool {
 	return &InterviewQuestionsTool{
 		storageManager: storageManager,
+		logger:         slog.Default(),
 	}
+}
+
+// WithLogger sets the logger for the tool
+func (t *InterviewQuestionsTool) WithLogger(logger *slog.Logger) *InterviewQuestionsTool {
+	t.logger = logger
+	return t
 }
 
 // Call implements the MCP tool interface

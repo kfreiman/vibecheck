@@ -2,7 +2,10 @@
 FROM golang:1.25-bookworm AS modules
 WORKDIR /app
 COPY go.mod go.sum ./
-RUN go mod download
+
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Stage 2: Development builder with air, playwright, and playwright browser binaries
 FROM golang:1.25-bookworm AS builder

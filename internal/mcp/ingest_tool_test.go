@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kfreiman/vibecheck/internal/converter"
+	"github.com/kfreiman/vibecheck/internal/ingest"
 	"github.com/kfreiman/vibecheck/internal/storage"
 )
 
@@ -33,8 +34,11 @@ func TestIngestDocumentTool_Call(t *testing.T) {
 	// Create converter (optional - will be nil if markitdown not found)
 	documentConverter := converter.NewPDFConverter()
 
+	// Create ingestor
+	ingestor := ingest.NewIngestor(storageManager, documentConverter)
+
 	// Create ingest tool
-	ingestTool := NewIngestDocumentTool(storageManager, documentConverter)
+	ingestTool := NewIngestDocumentTool(ingestor)
 
 	// Test case 1: Ingest markdown file
 	t.Run("IngestMarkdownFile", func(t *testing.T) {
@@ -171,8 +175,11 @@ func TestStorageAfterIngest(t *testing.T) {
 	assert.Equal(t, int64(0), initialCV, "Should start with 0 CVs")
 	assert.Equal(t, int64(0), initialJD, "Should start with 0 JDs")
 
+	// Create ingestor
+	ingestor := ingest.NewIngestor(storageManager, nil)
+
 	// Create ingest tool
-	ingestTool := NewIngestDocumentTool(storageManager, nil)
+	ingestTool := NewIngestDocumentTool(ingestor)
 
 	// Ingest a CV
 	cvContent := "# CV Test\n\nSoftware Engineer with 5 years experience"

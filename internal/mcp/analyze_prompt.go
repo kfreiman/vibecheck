@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/kfreiman/vibecheck/internal/storage"
@@ -12,13 +13,21 @@ import (
 // AnalyzeFitPrompt handles the analyze_fit prompt
 type AnalyzeFitPrompt struct {
 	storageManager *storage.StorageManager
+	logger         *slog.Logger
 }
 
 // NewAnalyzeFitPrompt creates a new analyze fit prompt
 func NewAnalyzeFitPrompt(storageManager *storage.StorageManager) *AnalyzeFitPrompt {
 	return &AnalyzeFitPrompt{
 		storageManager: storageManager,
+		logger:         slog.Default(),
 	}
+}
+
+// WithLogger sets the logger for the prompt
+func (p *AnalyzeFitPrompt) WithLogger(logger *slog.Logger) *AnalyzeFitPrompt {
+	p.logger = logger
+	return p
 }
 
 // Handle implements the prompt handler interface

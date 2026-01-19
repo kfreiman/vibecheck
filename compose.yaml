@@ -1,4 +1,27 @@
 services:
+  ollama:
+    container_name: ollama
+    image: ollama/ollama:latest
+    networks:
+      main:
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
   vibecheck:
     container_name: vibecheck
     build:
@@ -10,6 +33,7 @@ services:
     environment:
       VIBECHECK_STORAGE_PATH: ${VIBECHECK_STORAGE_PATH:-./storage}
       VIBECHECK_STORAGE_TTL: ${VIBECHECK_STORAGE_TTL:-24h}
+      OLLAMA_HOST: ollama:11434
     volumes:
       # Persistent storage for uploaded documents
       - storage:/app/storage
@@ -21,9 +45,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    depends_on:
+      ollama:
+        condition: service_healthy
 
 volumes:
   storage:
+  ollama:
 
 networks:
   main:

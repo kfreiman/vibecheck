@@ -11,16 +11,15 @@ import (
 	"time"
 
 	"github.com/kfreiman/vibecheck/internal/converter"
+	"github.com/kfreiman/vibecheck/internal/ingest"
 	"github.com/kfreiman/vibecheck/internal/storage"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	slogzerolog "github.com/samber/slog-zerolog"
 )
 
-var logger = slog.New(slogzerolog.Option{}.NewZerologHandler())
-
 // CVResourceHandler handles CV resource requests
-// Hot reload test comment - this should trigger air rebuild
-type CVResourceHandler struct{}
+type CVResourceHandler struct {
+	logger *slog.Logger
+}
 
 // ReadResource processes resource requests for CV data
 func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
@@ -35,7 +34,7 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 	path := strings.TrimPrefix(uri, "file://")
 	path, err := filepath.Abs(path)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to parse file URI",
+		h.logger.ErrorContext(ctx, "failed to parse file URI",
 			"error", err,
 			"uri", uri,
 		)
@@ -46,7 +45,7 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 	if stat, err := os.Stat(path); err == nil && stat.IsDir() {
 		cvFiles, err := FindCVFiles(path)
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to find CV files",
+			h.logger.ErrorContext(ctx, "failed to find CV files",
 				"error", err,
 				"path", path,
 			)
@@ -60,7 +59,7 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 		}
 		list.WriteString("\nUse file:///path/to/file.md to read a specific CV.\n")
 
-		logger.DebugContext(ctx, "listed CV files in directory",
+		h.logger.DebugContext(ctx, "listed CV files in directory",
 			"path", path,
 			"count", len(cvFiles),
 		)
@@ -77,14 +76,14 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 	// Read single file
 	content, err := ReadCVFile(path)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to read CV file",
+		h.logger.ErrorContext(ctx, "failed to read CV file",
 			"error", err,
 			"path", path,
 		)
 		return nil, mcp.ResourceNotFoundError(uri)
 	}
 
-	logger.DebugContext(ctx, "read CV file",
+	h.logger.DebugContext(ctx, "read CV file",
 		"path", path,
 		"size", len(content),
 	)
@@ -98,384 +97,138 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 	}, nil
 }
 
-// TODO: accept logger
-// StartMCPServer starts an MCP server using HTTP/SSE transport
-func StartMCPServer() error {
-	ctx := context.Background()
+// Server encapsulates the MCP server with all its dependencies
+type Server struct {
+	mcpServer         *mcp.Server
+	storageManager    *storage.StorageManager
+	documentConverter converter.DocumentConverter
+	logger            *slog.Logger
+	config            Config
+}
+
+// NewServer creates a new MCP server with the given configuration
+func NewServer(cfg Config, logger *slog.Logger) (*Server, error) {
+	// Parse storage TTL from string to time.Duration
+	ttl, err := time.ParseDuration(cfg.StorageTTL)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to parse storage TTL",
+			"error", err,
+			"ttl", cfg.StorageTTL,
+		)
+		return nil, fmt.Errorf("parse TTL: %w", err)
+	}
 
 	// Initialize storage manager
 	storageManager, err := storage.NewStorageManager(storage.StorageConfig{
-		BasePath:   getEnvOrDefault("VIBECHECK_STORAGE_PATH", "./storage"),
-		DefaultTTL: getEnvDurationOrDefault("VIBECHECK_STORAGE_TTL", 24*time.Hour),
+		BasePath:   cfg.StoragePath,
+		DefaultTTL: ttl,
 	})
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to initialize storage manager",
+		logger.ErrorContext(context.Background(), "failed to initialize storage manager",
 			"error", err,
 		)
-		return fmt.Errorf("failed to initialize storage: %w", err)
+		return nil, fmt.Errorf("storage init: %w", err)
 	}
 
-	// Initialize document converter (pure Go PDF extraction)
+	// Initialize document converter
 	documentConverter := converter.NewPDFConverter()
 
-	// Create handlers
-	cvHandler := &CVResourceHandler{}
-	storageResourceHandler := NewStorageResourceHandler(storageManager)
-	ingestTool := NewIngestDocumentTool(storageManager, documentConverter)
-	cleanupTool := NewCleanupStorageTool(storageManager)
-	listDocumentsTool := NewListDocumentsTool(storageManager)
-	cvCheckTool, _ := NewCVCheckTool()
-	analyzeFitPrompt := NewAnalyzeFitPrompt(storageManager)
-	interviewQuestionsTool := NewInterviewQuestionsTool(storageManager)
-	analyzeTool := NewAnalyzeTool(storageManager)
+	// Create server instance
+	s := &Server{
+		storageManager:    storageManager,
+		documentConverter: documentConverter,
+		logger:            logger,
+		config:            cfg,
+	}
 
-	// Create MCP server
+	// Create MCP server implementation
 	impl := &mcp.Implementation{
 		Name:    "VibeCheckServer",
 		Version: "2.0.0",
 	}
-	opts := &mcp.ServerOptions{
-		Instructions: `VibeCheck Server - CV Analysis Tool (v1 - Portfolio/Demo Version)
 
-This server provides CV and job description management with intelligent analysis.
+	s.mcpServer = mcp.NewServer(impl, &mcp.ServerOptions{
+		Instructions: ServerInstructions,
+	})
 
-**Note:** This is v1 for portfolio/demo purposes only. Do not use with sensitive personal data.
+	// Register all handlers
+	s.registerHandlers()
 
-## Transport
+	return s, nil
+}
 
-This server uses streamable HTTP transport only. Connect via:
-- POST /mcp  - Streamable HTTP transport (recommended)
+// registerHandlers registers all resources, tools, and prompts on the MCP server
+func (s *Server) registerHandlers() {
+	// Register resources
+	s.registerResources()
 
-Stdio transport is not supported.
+	// Register tools
+	s.registerTools()
 
-## Resources
+	// Register prompts
+	s.registerPrompts()
+}
 
-### File Resources (file://)
-- file:///path/to/cv.md: Read a CV markdown file
-- file:///path/to/cv/: List all CV files in a directory
+// registerResources registers all resource handlers
+func (s *Server) registerResources() {
+	// CV file resource handler
+	cvHandler := &CVResourceHandler{logger: s.logger}
+	s.mcpServer.AddResource(ResourceDefinitions[0], cvHandler.ReadResource)
 
-### Storage Resources (cv://, jd://)
-- cv://[uuid]: Access an ingested CV document
-- jd://[uuid]: Access an ingested job description
+	// Storage resource handler
+	storageHandler := NewStorageResourceHandler(s.storageManager)
 
-## Tools
-
-### ingest_document
-Ingest a CV or job description into storage.
-Parameters:
-- path: File path or URL to document (PDF, MD)
-- type: Document type ("cv" or "jd")
-
-Example: {"path": "./resume.pdf", "type": "cv"}
-
-Returns a URI (cv://[uuid] or jd://[uuid]) for later use.
-
-### cleanup_storage
-Remove old documents from storage based on TTL.
-Parameters:
-- ttl: Time to live (e.g., "24h" or 24 for hours)
-
-Example: {"ttl": "48h"}
-
-### list_documents
-List all stored documents (CVs and job descriptions) by their UUIDs.
-Parameters:
-- type: Optional filter - "cv" for CVs only, "jd" for job descriptions only, or empty for all
-
-Example: {"type": "cv"}
-
-Returns structured list of document URIs (cv://[uuid] or jd://[uuid]).
-
-### cv_check
-Compare a CV against a job description (legacy method).
-Parameters:
-- cv: CV content or file path
-- job: Job description content or file path
-
-### generate_interview_questions
-Generate targeted interview questions based on CV and job description gap analysis.
-Parameters:
-- cv_uri: URI of ingested CV (cv://[uuid])
-- jd_uri: URI of ingested job description (jd://[uuid])
-- style: Optional - "technical", "behavioral", or "comprehensive" (default)
-- count: Optional - number of questions to generate (default: 5)
-
-Example: {"cv_uri": "cv://550e8400-e29b...", "jd_uri": "jd://550e8400-e29b...", "style": "technical", "count": 5}
-
-Returns a prompt for generating interview questions focused on:
-- Skills/experience gaps between CV and JD
-- Areas needing clarification
-- Technical and behavioral question balance
-
-### analyze_cv_jd
-Structured CV/Job Description analysis with BM25 match scoring.
-Parameters:
-- cv_uri: URI of ingested CV (cv://[uuid])
-- jd_uri: URI of ingested job description (jd://[uuid])
-
-Example: {"cv_uri": "cv://550e8400-e29b...", "jd_uri": "jd://550e8400-e29b..."}
-
-Returns structured JSON with:
-- match_percentage: 0-100% based on BM25 scoring
-- skill_coverage: Ratio of JD terms present in CV
-- top_skills: Common terms with highest scores
-- missing_skills: JD terms not found in CV
-- analysis_summary: Human-readable report
-
-## Prompts
-
-### cv_analysis
-Analyze CV vs job description using raw content or URLs.
-Parameters (choose one for CV and one for job):
-- cv_content: Raw CV markdown text
-- cv_url: URL to CV document
-- cv_filepath: Path to CV file
-- job_content: Raw job description text
-- job_url: URL to job posting
-- job_filepath: Path to job file
-
-### analyze_fit
-Analyze fit between ingested CV and job description.
-Parameters:
-- cv_uri: URI of ingested CV (cv://[uuid])
-- jd_uri: URI of ingested job description (jd://[uuid])
-
-Example: {"cv_uri": "cv://550e8400-e29b...", "jd_uri": "jd://550e8400-e29b..."}
-
-Returns structured analysis with:
-- Match percentage
-- Technical gap analysis
-- Evidence-based questions
-- Key strengths
-- Recommendations
-
-## Environment Variables
-
-- VIBECHECK_STORAGE_PATH: Storage directory (default: ./storage)
-- VIBECHECK_STORAGE_TTL: Default TTL for cleanup (default: 24h)
-`,
-	}
-	server := mcp.NewServer(impl, opts)
-
-	// Register file-based resources
-	server.AddResource(&mcp.Resource{
-		URI:         "file:///cv",
-		Name:        "CV Directory",
-		Description: "List all CV markdown files",
-		MIMEType:    "text/markdown",
-	}, cvHandler.ReadResource)
-
-	// Register storage resources
-	for _, resource := range storageResourceHandler.ListResources() {
-		server.AddResource(resource, storageResourceHandler.ReadResource)
+	// Register individual storage resources
+	for _, resource := range storageHandler.ListResources() {
+		s.mcpServer.AddResource(resource, storageHandler.ReadResource)
 	}
 
 	// Register resource templates
-	for _, template := range storageResourceHandler.ListResourceTemplates() {
-		server.AddResourceTemplate(&template, storageResourceHandler.ReadResource)
+	for _, template := range storageHandler.ListResourceTemplates() {
+		s.mcpServer.AddResourceTemplate(&template, storageHandler.ReadResource)
 	}
+}
 
-	// Register tools
+// registerTools registers all tool handlers
+func (s *Server) registerTools() {
+	// Create ingestor
+	ingestor := ingest.NewIngestor(s.storageManager, s.documentConverter).WithLogger(s.logger)
 
 	// ingest_document tool
-	server.AddTool(&mcp.Tool{
-		Name:        "ingest_document",
-		Description: "Ingest a CV or job description into storage. Supports local paths, URLs, and various document formats (PDF, DOCX, MD). Returns a URI for later use.",
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"path": map[string]interface{}{
-					"type":        "string",
-					"description": "File path, URL, or raw markdown content to ingest",
-				},
-				"type": map[string]interface{}{
-					"type":        "string",
-					"description": "Document type: 'cv' or 'jd'",
-					"enum":        []string{"cv", "jd"},
-					"default":     "cv",
-				},
-			},
-			"required": []string{"path"},
-		},
-	}, ingestTool.Call)
+	ingestTool := NewIngestDocumentTool(ingestor).WithLogger(s.logger)
+	s.mcpServer.AddTool(ToolDefinitions["ingest_document"], ingestTool.Call)
 
 	// cleanup_storage tool
-	server.AddTool(&mcp.Tool{
-		Name:        "cleanup_storage",
-		Description: "Remove documents older than the specified TTL from storage. Useful for maintaining storage hygiene.",
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"ttl": map[string]interface{}{
-					"type":        "string",
-					"description": "Time to live (e.g., '24h', '7d', or hours as number). Uses default TTL if not specified.",
-				},
-			},
-			"required": []string{},
-		},
-	}, cleanupTool.Call)
+	cleanupTool := NewCleanupStorageTool(s.storageManager).WithLogger(s.logger)
+	s.mcpServer.AddTool(ToolDefinitions["cleanup_storage"], cleanupTool.Call)
 
 	// list_documents tool
-	server.AddTool(&mcp.Tool{
-		Name:        "list_documents",
-		Description: "List all stored documents (CVs and job descriptions) by their UUIDs. Returns structured data with document URIs.",
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"type": map[string]interface{}{
-					"type":        "string",
-					"description": "Optional filter: 'cv' for CVs only, 'jd' for job descriptions only, or empty for all documents",
-					"enum":        []string{"cv", "jd"},
-				},
-			},
-			"required": []string{},
-		},
-	}, listDocumentsTool.Call)
-
-	// cv_check tool (legacy)
-	if cvCheckTool != nil {
-		server.AddTool(&mcp.Tool{
-			Name:        "cv_check",
-			Description: "Compare a CV against a job description. Accepts file paths or raw text for both parameters.",
-			InputSchema: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"cv": map[string]interface{}{
-						"type":        "string",
-						"description": "CV content (file path or raw text)",
-					},
-					"job": map[string]interface{}{
-						"type":        "string",
-						"description": "Job description content (file path or raw text)",
-					},
-				},
-				"required": []string{"cv", "job"},
-			},
-		}, cvCheckTool.Call)
-	}
+	listDocumentsTool := NewListDocumentsTool(s.storageManager).WithLogger(s.logger)
+	s.mcpServer.AddTool(ToolDefinitions["list_documents"], listDocumentsTool.Call)
 
 	// generate_interview_questions tool
-	server.AddTool(&mcp.Tool{
-		Name:        "generate_interview_questions",
-		Description: "Generate targeted interview questions based on CV and job description gap analysis. Returns a prompt for generating questions focused on skills gaps, areas needing clarification, and technical/behavioral balance.",
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"cv_uri": map[string]interface{}{
-					"type":        "string",
-					"description": "URI of ingested CV (cv://[uuid])",
-				},
-				"jd_uri": map[string]interface{}{
-					"type":        "string",
-					"description": "URI of ingested job description (jd://[uuid])",
-				},
-				"style": map[string]interface{}{
-					"type":        "string",
-					"description": "Question style: 'technical', 'behavioral', or 'comprehensive' (default)",
-					"enum":        []string{"technical", "behavioral", "comprehensive"},
-					"default":     "comprehensive",
-				},
-				"count": map[string]interface{}{
-					"type":        "integer",
-					"description": "Number of questions to generate (default: 5)",
-					"minimum":     1,
-					"maximum":     20,
-					"default":     5,
-				},
-			},
-			"required": []string{"cv_uri", "jd_uri"},
-		},
-	}, interviewQuestionsTool.Call)
+	interviewQuestionsTool := NewInterviewQuestionsTool(s.storageManager).WithLogger(s.logger)
+	s.mcpServer.AddTool(ToolDefinitions["generate_interview_questions"], interviewQuestionsTool.Call)
 
-	// analyze_cv_jd tool (BM25-based structured analysis)
-	server.AddTool(&mcp.Tool{
-		Name:        "analyze_cv_jd",
-		Description: "Structured CV/Job Description analysis with BM25 match scoring. Returns match percentage, skill coverage, and gap analysis.",
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"cv_uri": map[string]interface{}{
-					"type":        "string",
-					"description": "URI of ingested CV (cv://[uuid])",
-				},
-				"jd_uri": map[string]interface{}{
-					"type":        "string",
-					"description": "URI of ingested job description (jd://[uuid])",
-				},
-			},
-			"required": []string{"cv_uri", "jd_uri"},
-		},
-	}, analyzeTool.Call)
+	// analyze_cv_jd tool
+	analyzeTool := NewAnalyzeTool(s.storageManager).WithLogger(s.logger)
+	s.mcpServer.AddTool(ToolDefinitions["analyze_cv_jd"], analyzeTool.Call)
+}
 
-	// Register prompts
+// registerPrompts registers all prompt handlers
+func (s *Server) registerPrompts() {
+	// analyze_fit prompt
+	analyzeFitPrompt := NewAnalyzeFitPrompt(s.storageManager).WithLogger(s.logger)
+	for _, promptDef := range PromptDefinitions {
+		s.mcpServer.AddPrompt(promptDef, analyzeFitPrompt.Handle)
+	}
+}
 
-	// cv_analysis prompt (existing)
-	server.AddPrompt(&mcp.Prompt{
-		Name:        "cv_analysis",
-		Description: "CV vs Job Description Analysis Prompt",
-		Arguments: []*mcp.PromptArgument{
-			{
-				Name:        CVContentParam,
-				Title:       "CV Content",
-				Description: "Raw CV content (markdown text)",
-				Required:    false,
-			},
-			{
-				Name:        CVURLParam,
-				Title:       "CV URL",
-				Description: "URL to CV document (PDF) - will be converted to markdown",
-				Required:    false,
-			},
-			{
-				Name:        CVFilepathParam,
-				Title:       "CV Filepath",
-				Description: "Path to CV file (PDF, MD) - will be converted to markdown",
-				Required:    false,
-			},
-			{
-				Name:        JobContentParam,
-				Title:       "Job Content",
-				Description: "Raw job description content (markdown text)",
-				Required:    false,
-			},
-			{
-				Name:        JobURLParam,
-				Title:       "Job URL",
-				Description: "URL to job posting (PDF) - will be converted to markdown",
-				Required:    false,
-			},
-			{
-				Name:        JobFilepathParam,
-				Title:       "Job Filepath",
-				Description: "Path to job description file (PDF, MD) - will be converted to markdown",
-				Required:    false,
-			},
-		},
-	}, CVPromptHandler)
-
-	// analyze_fit prompt (new)
-	server.AddPrompt(&mcp.Prompt{
-		Name:        "analyze_fit",
-		Description: "Analyze fit between ingested CV and job description with structured output",
-		Arguments: []*mcp.PromptArgument{
-			{
-				Name:        "cv_uri",
-				Title:       "CV URI",
-				Description: "URI of ingested CV (cv://[uuid])",
-				Required:    true,
-			},
-			{
-				Name:        "jd_uri",
-				Title:       "Job Description URI",
-				Description: "URI of ingested job description (jd://[uuid])",
-				Required:    true,
-			},
-		},
-	}, analyzeFitPrompt.Handle)
-
+// ListenAndServe starts the HTTP server and begins handling requests
+func (s *Server) ListenAndServe() error {
 	// Create HTTP streaming handler
 	httpHandler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
-		return server
+		return s.mcpServer
 	}, &mcp.StreamableHTTPOptions{
 		JSONResponse: true,
 		Logger:       nil,
@@ -484,40 +237,37 @@ Returns structured analysis with:
 	// Set up HTTP server with routes
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", httpHandler)
-	mux.HandleFunc("/health/live", LivenessHandler)
-	mux.HandleFunc("/health/ready", ReadinessHandlerFunc(storageManager))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprintf(w, "VibeCheck MCP Server\n\n")
-		fmt.Fprintf(w, "Endpoints:\n")
-		fmt.Fprintf(w, "  POST /mcp          - Streamable HTTP transport (recommended)\n")
-		fmt.Fprintf(w, "  GET  /health/live  - Liveness probe\n")
-		fmt.Fprintf(w, "  GET  /health/ready - Readiness probe\n")
-		fmt.Fprintf(w, "  GET  /             - This help message\n\n")
-		fmt.Fprintf(w, "Server: %s %s\n", impl.Name, impl.Version)
-	})
+	mux.HandleFunc("/health/live", s.livenessHandler)
+	mux.HandleFunc("/health/ready", s.readinessHandler)
+	mux.HandleFunc("/", s.indexHandler)
+
 	// Start HTTP server
-	logger.InfoContext(ctx, "starting MCP server",
-		"port", 8080,
+	addr := fmt.Sprintf(":%d", s.config.Port)
+	s.logger.InfoContext(context.Background(), "starting MCP server",
+		"port", s.config.Port,
 		"endpoints", []string{"/mcp", "/health/live", "/health/ready", "/"},
 	)
-	return http.ListenAndServe(":8080", mux)
+	return http.ListenAndServe(addr, mux)
 }
 
-// getEnvOrDefault returns an environment variable or a default value
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
+// livenessHandler checks if the server is running and accepting requests
+func (s *Server) livenessHandler(w http.ResponseWriter, r *http.Request) {
+	LivenessHandlerWithLogger(w, r, s.logger)
 }
 
-// getEnvDurationOrDefault returns an environment variable as duration or default
-func getEnvDurationOrDefault(key string, defaultValue time.Duration) time.Duration {
-	if value := os.Getenv(key); value != "" {
-		if duration, err := time.ParseDuration(value); err == nil {
-			return duration
-		}
-	}
-	return defaultValue
+// readinessHandler checks if the server is ready to handle requests
+func (s *Server) readinessHandler(w http.ResponseWriter, r *http.Request) {
+	ReadinessHandlerWithLogger(w, r, s.storageManager, s.logger)
+}
+
+// indexHandler returns the server information page
+func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	fmt.Fprintf(w, "VibeCheck MCP Server\n\n")
+	fmt.Fprintf(w, "Endpoints:\n")
+	fmt.Fprintf(w, "  POST /mcp          - Streamable HTTP transport (recommended)\n")
+	fmt.Fprintf(w, "  GET  /health/live  - Liveness probe\n")
+	fmt.Fprintf(w, "  GET  /health/ready - Readiness probe\n")
+	fmt.Fprintf(w, "  GET  /             - This help message\n\n")
+	fmt.Fprintf(w, "Server: %s %s\n", "VibeCheckServer", "2.0.0")
 }
