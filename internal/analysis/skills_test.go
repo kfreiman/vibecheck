@@ -113,9 +113,9 @@ func TestExtractSkills_ExperienceExtraction(t *testing.T) {
 	sd := NewSkillsDictionary()
 
 	tests := []struct {
-		content          string
-		skill            string
-		expectedYears    int
+		content       string
+		skill         string
+		expectedYears int
 	}{
 		{"5 years of go experience", "go", 5},
 		{"python with 3 years", "python", 3},
@@ -239,9 +239,9 @@ func TestMatchSkills_EmptyInputs(t *testing.T) {
 
 func TestCalculateSkillCoverage_Skills(t *testing.T) {
 	tests := []struct {
-		cvSkills  []Skill
-		jdSkills  []Skill
-		expected  float64
+		cvSkills []Skill
+		jdSkills []Skill
+		expected float64
 	}{
 		// Full coverage
 		{
@@ -368,7 +368,7 @@ func TestSkillsDictionary_LoadNotFound(t *testing.T) {
 	originalPath := filepath.Join("testdata", "skills_dictionary.txt")
 
 	// Test that it handles missing dictionary gracefully
-_sd := &SkillsDictionary{
+	_sd := &SkillsDictionary{
 		skillsByCategory: make(map[string][]string),
 		skillIndex:       make(map[string]string),
 	}

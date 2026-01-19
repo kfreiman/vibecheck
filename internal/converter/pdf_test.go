@@ -3,7 +3,6 @@ package converter
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -83,9 +82,13 @@ startxref
 421
 %%EOF`
 
-	tmpFile, err := ioutil.TempFile("", "test-*.pdf")
+	tmpFile, err := os.CreateTemp("", "test-*.pdf")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() {
+		if closeErr := tmpFile.Close(); closeErr != nil {
+			t.Logf("Failed to close temp file: %v", closeErr)
+		}
+	}()
 
 	_, err = tmpFile.WriteString(pdfContent)
 	require.NoError(t, err)
@@ -95,18 +98,34 @@ startxref
 
 func TestPDFConverter_Supports(t *testing.T) {
 	converter := NewPDFConverter()
-	defer converter.Close()
+	defer func() {
+		if err := converter.Close(); err != nil {
+			t.Logf("Failed to close converter: %v", err)
+		}
+	}()
 
 	// Create temp files for testing
-	tmpPDF, err := ioutil.TempFile("", "test-*.pdf")
+	tmpPDF, err := os.CreateTemp("", "test-*.pdf")
 	require.NoError(t, err)
-	defer os.Remove(tmpPDF.Name())
-	tmpPDF.Close()
+	defer func() {
+		if removeErr := os.Remove(tmpPDF.Name()); removeErr != nil {
+			t.Logf("Failed to remove temp PDF: %v", removeErr)
+		}
+	}()
+	if closeErr := tmpPDF.Close(); closeErr != nil {
+		t.Logf("Failed to close temp PDF: %v", closeErr)
+	}
 
-	tmpDOCX, err := ioutil.TempFile("", "test-*.docx")
+	tmpDOCX, err := os.CreateTemp("", "test-*.docx")
 	require.NoError(t, err)
-	defer os.Remove(tmpDOCX.Name())
-	tmpDOCX.Close()
+	defer func() {
+		if removeErr := os.Remove(tmpDOCX.Name()); removeErr != nil {
+			t.Logf("Failed to remove temp DOCX: %v", removeErr)
+		}
+	}()
+	if closeErr := tmpDOCX.Close(); closeErr != nil {
+		t.Logf("Failed to close temp DOCX: %v", closeErr)
+	}
 
 	tests := []struct {
 		name     string
@@ -129,7 +148,11 @@ func TestPDFConverter_Supports(t *testing.T) {
 
 func TestPDFConverter_IsAvailable(t *testing.T) {
 	converter := NewPDFConverter()
-	defer converter.Close()
+	defer func() {
+		if err := converter.Close(); err != nil {
+			t.Logf("Failed to close converter: %v", err)
+		}
+	}()
 
 	// Should be available if PDFium initialized successfully
 	// Note: This may fail if PDFium can't initialize
@@ -139,7 +162,11 @@ func TestPDFConverter_IsAvailable(t *testing.T) {
 
 func TestPDFConverter_Convert_Text(t *testing.T) {
 	converter := NewPDFConverter()
-	defer converter.Close()
+	defer func() {
+		if err := converter.Close(); err != nil {
+			t.Logf("Failed to close converter: %v", err)
+		}
+	}()
 
 	if !converter.IsAvailable() {
 		t.Skip("PDFium not available, skipping test")
@@ -153,7 +180,11 @@ func TestPDFConverter_Convert_Text(t *testing.T) {
 
 func TestPDFConverter_Convert_PDF(t *testing.T) {
 	converter := NewPDFConverter()
-	defer converter.Close()
+	defer func() {
+		if err := converter.Close(); err != nil {
+			t.Logf("Failed to close converter: %v", err)
+		}
+	}()
 
 	if !converter.IsAvailable() {
 		t.Skip("PDFium not available, skipping test")
@@ -161,7 +192,11 @@ func TestPDFConverter_Convert_PDF(t *testing.T) {
 
 	// Create a test PDF
 	pdfPath := createTestPDF(t, "Hello World")
-	defer os.Remove(pdfPath)
+	defer func() {
+		if err := os.Remove(pdfPath); err != nil {
+			t.Logf("Failed to remove PDF: %v", err)
+		}
+	}()
 
 	result, err := converter.Convert(context.Background(), pdfPath)
 	require.NoError(t, err)
@@ -170,7 +205,11 @@ func TestPDFConverter_Convert_PDF(t *testing.T) {
 
 func TestPDFConverter_Convert_MultiPagePDF(t *testing.T) {
 	converter := NewPDFConverter()
-	defer converter.Close()
+	defer func() {
+		if err := converter.Close(); err != nil {
+			t.Logf("Failed to close converter: %v", err)
+		}
+	}()
 
 	if !converter.IsAvailable() {
 		t.Skip("PDFium not available, skipping test")
@@ -179,7 +218,11 @@ func TestPDFConverter_Convert_MultiPagePDF(t *testing.T) {
 	// Create a multi-page PDF by creating multiple PDFs and combining them
 	// For simplicity, we'll just test single page extraction
 	pdfPath := createTestPDF(t, "Page One Content")
-	defer os.Remove(pdfPath)
+	defer func() {
+		if err := os.Remove(pdfPath); err != nil {
+			t.Logf("Failed to remove PDF: %v", err)
+		}
+	}()
 
 	result, err := converter.Convert(context.Background(), pdfPath)
 	require.NoError(t, err)
@@ -188,7 +231,11 @@ func TestPDFConverter_Convert_MultiPagePDF(t *testing.T) {
 
 func TestPDFConverter_Convert_NonExistentFile(t *testing.T) {
 	converter := NewPDFConverter()
-	defer converter.Close()
+	defer func() {
+		if err := converter.Close(); err != nil {
+			t.Logf("Failed to close converter: %v", err)
+		}
+	}()
 
 	if !converter.IsAvailable() {
 		t.Skip("PDFium not available, skipping test")
@@ -197,11 +244,15 @@ func TestPDFConverter_Convert_NonExistentFile(t *testing.T) {
 	// Test with a path that looks like a PDF but doesn't exist
 	// Since ParseInput checks file existence, non-existent paths are treated as text
 	// This is the expected behavior - if file doesn't exist, treat as text content
-	tmpFile, err := ioutil.TempFile("", "test-*.pdf")
+	tmpFile, err := os.CreateTemp("", "test-*.pdf")
 	require.NoError(t, err)
 	tmpPath := tmpFile.Name()
-	tmpFile.Close()
-	os.Remove(tmpPath)
+	if closeErr := tmpFile.Close(); closeErr != nil {
+		t.Logf("Failed to close temp file: %v", closeErr)
+	}
+	if removeErr := os.Remove(tmpPath); removeErr != nil {
+		t.Logf("Failed to remove temp file: %v", removeErr)
+	}
 
 	// The Convert method treats non-existent files as text input
 	result, err := converter.Convert(context.Background(), tmpPath)
@@ -211,20 +262,30 @@ func TestPDFConverter_Convert_NonExistentFile(t *testing.T) {
 
 func TestPDFConverter_Convert_InvalidPDF(t *testing.T) {
 	converter := NewPDFConverter()
-	defer converter.Close()
+	defer func() {
+		if err := converter.Close(); err != nil {
+			t.Logf("Failed to close converter: %v", err)
+		}
+	}()
 
 	if !converter.IsAvailable() {
 		t.Skip("PDFium not available, skipping test")
 	}
 
 	// Create a file that's not a valid PDF
-	tmpFile, err := ioutil.TempFile("", "invalid-*.pdf")
+	tmpFile, err := os.CreateTemp("", "invalid-*.pdf")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
+			t.Logf("Failed to remove temp file: %v", removeErr)
+		}
+	}()
 
 	_, err = tmpFile.WriteString("This is not a PDF")
 	require.NoError(t, err)
-	tmpFile.Close()
+	if closeErr := tmpFile.Close(); closeErr != nil {
+		t.Logf("Failed to close temp file: %v", closeErr)
+	}
 
 	_, err = converter.Convert(context.Background(), tmpFile.Name())
 	require.Error(t, err)
@@ -233,7 +294,11 @@ func TestPDFConverter_Convert_InvalidPDF(t *testing.T) {
 
 func TestPDFConverter_Convert_PathTraversal(t *testing.T) {
 	converter := NewPDFConverter()
-	defer converter.Close()
+	defer func() {
+		if err := converter.Close(); err != nil {
+			t.Logf("Failed to close converter: %v", err)
+		}
+	}()
 
 	if !converter.IsAvailable() {
 		t.Skip("PDFium not available, skipping test")
@@ -249,7 +314,11 @@ func TestPDFConverter_Convert_PathTraversal(t *testing.T) {
 
 func TestPDFConverter_Convert_EmptyPDF(t *testing.T) {
 	converter := NewPDFConverter()
-	defer converter.Close()
+	defer func() {
+		if err := converter.Close(); err != nil {
+			t.Logf("Failed to close converter: %v", err)
+		}
+	}()
 
 	if !converter.IsAvailable() {
 		t.Skip("PDFium not available, skipping test")
@@ -306,13 +375,19 @@ startxref
 255
 %%EOF`
 
-	tmpFile, err := ioutil.TempFile("", "empty-*.pdf")
+	tmpFile, err := os.CreateTemp("", "empty-*.pdf")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
+			t.Logf("Failed to remove temp file: %v", removeErr)
+		}
+	}()
 
 	_, err = tmpFile.WriteString(pdfContent)
 	require.NoError(t, err)
-	tmpFile.Close()
+	if closeErr := tmpFile.Close(); closeErr != nil {
+		t.Logf("Failed to close temp file: %v", closeErr)
+	}
 
 	result, err := converter.Convert(context.Background(), tmpFile.Name())
 	require.NoError(t, err)

@@ -52,7 +52,8 @@ func TestAnalyzeTool_Call_BasicAnalysis(t *testing.T) {
 		"cv_uri": cvURI,
 		"jd_uri": jdURI,
 	}
-	argsJSON, _ := json.Marshal(args)
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
 
 	request := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{
@@ -68,8 +69,9 @@ func TestAnalyzeTool_Call_BasicAnalysis(t *testing.T) {
 
 	// Parse JSON result
 	var analyzeResult AnalyzeResult
-	err = json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &analyzeResult)
-	require.NoError(t, err)
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok, "expected TextContent")
+	require.NoError(t, json.Unmarshal([]byte(textContent.Text), &analyzeResult))
 
 	// Verify analysis results
 	assert.Greater(t, analyzeResult.MatchPercentage, 0)
@@ -86,18 +88,22 @@ func TestAnalyzeTool_Call_BasicAnalysis(t *testing.T) {
 
 func TestAnalyzeTool_Call_IdenticalDocuments(t *testing.T) {
 	tempDir := t.TempDir()
-	sm, _ := storage.NewStorageManager(storage.StorageConfig{
+	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath:   tempDir,
 		DefaultTTL: 24 * time.Hour,
 	})
+	require.NoError(t, err)
 
 	content := []byte("golang python rust")
-	cvURI, _ := sm.SaveDocument(storage.DocumentTypeCV, content, "cv.md")
-	jdURI, _ := sm.SaveDocument(storage.DocumentTypeJD, content, "jd.md")
+	cvURI, err := sm.SaveDocument(storage.DocumentTypeCV, content, "cv.md")
+	require.NoError(t, err)
+	jdURI, err := sm.SaveDocument(storage.DocumentTypeJD, content, "jd.md")
+	require.NoError(t, err)
 
 	tool := NewAnalyzeTool(sm)
 	args := map[string]interface{}{"cv_uri": cvURI, "jd_uri": jdURI}
-	argsJSON, _ := json.Marshal(args)
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
 	request := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Arguments: json.RawMessage(argsJSON)},
 	}
@@ -106,7 +112,9 @@ func TestAnalyzeTool_Call_IdenticalDocuments(t *testing.T) {
 	require.NoError(t, err)
 
 	var analyzeResult AnalyzeResult
-	json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &analyzeResult)
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok, "expected TextContent")
+	require.NoError(t, json.Unmarshal([]byte(textContent.Text), &analyzeResult))
 
 	// Identical documents should have high match
 	assert.Greater(t, analyzeResult.MatchPercentage, 90)
@@ -116,33 +124,41 @@ func TestAnalyzeTool_Call_IdenticalDocuments(t *testing.T) {
 
 func TestAnalyzeTool_Call_EmptyContent(t *testing.T) {
 	tempDir := t.TempDir()
-	sm, _ := storage.NewStorageManager(storage.StorageConfig{
+	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath:   tempDir,
 		DefaultTTL: 24 * time.Hour,
 	})
+	require.NoError(t, err)
 
 	// Documents with different lengths (one empty, one with content)
-	jdURI, _ := sm.SaveDocument(storage.DocumentTypeJD, []byte(""), "empty.md")
-	cvURI, _ := sm.SaveDocument(storage.DocumentTypeCV, []byte("golang"), "cv.md")
+	jdURI, err := sm.SaveDocument(storage.DocumentTypeJD, []byte(""), "empty.md")
+	require.NoError(t, err)
+	cvURI, err := sm.SaveDocument(storage.DocumentTypeCV, []byte("golang"), "cv.md")
+	require.NoError(t, err)
 
 	tool := NewAnalyzeTool(sm)
 	args := map[string]interface{}{"cv_uri": cvURI, "jd_uri": jdURI}
-	argsJSON, _ := json.Marshal(args)
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
 	request := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Arguments: json.RawMessage(argsJSON)},
 	}
 
 	result, err := tool.Call(context.Background(), request)
 	require.Error(t, err)
-	assert.Contains(t, result.Content[0].(*mcp.TextContent).Text, "analysis failed")
+	require.Len(t, result.Content, 1)
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok, "expected TextContent")
+	assert.Contains(t, textContent.Text, "analysis failed")
 }
 
 func TestAnalyzeTool_Call_InvalidURIs(t *testing.T) {
 	tempDir := t.TempDir()
-	sm, _ := storage.NewStorageManager(storage.StorageConfig{
+	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath:   tempDir,
 		DefaultTTL: 24 * time.Hour,
 	})
+	require.NoError(t, err)
 
 	tool := NewAnalyzeTool(sm)
 
@@ -180,7 +196,8 @@ func TestAnalyzeTool_Call_InvalidURIs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			argsJSON, _ := json.Marshal(tt.args)
+			argsJSON, err := json.Marshal(tt.args)
+			require.NoError(t, err)
 			request := &mcp.CallToolRequest{
 				Params: &mcp.CallToolParamsRaw{Arguments: json.RawMessage(argsJSON)},
 			}
@@ -190,8 +207,10 @@ func TestAnalyzeTool_Call_InvalidURIs(t *testing.T) {
 				assert.Error(t, err)
 				// Check if result contains error message about the field
 				if len(result.Content) > 0 {
-					textContent := result.Content[0].(*mcp.TextContent).Text
-					assert.Contains(t, textContent, tt.errorField)
+					require.Len(t, result.Content, 1)
+					textContent, ok := result.Content[0].(*mcp.TextContent)
+					require.True(t, ok, "expected TextContent")
+					assert.Contains(t, textContent.Text, tt.errorField)
 				}
 			} else {
 				assert.NoError(t, err)
@@ -202,10 +221,11 @@ func TestAnalyzeTool_Call_InvalidURIs(t *testing.T) {
 
 func TestAnalyzeTool_Call_MissingDocuments(t *testing.T) {
 	tempDir := t.TempDir()
-	sm, _ := storage.NewStorageManager(storage.StorageConfig{
+	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath:   tempDir,
 		DefaultTTL: 24 * time.Hour,
 	})
+	require.NoError(t, err)
 
 	tool := NewAnalyzeTool(sm)
 
@@ -214,32 +234,40 @@ func TestAnalyzeTool_Call_MissingDocuments(t *testing.T) {
 		"cv_uri": "cv://nonexistent",
 		"jd_uri": "jd://nonexistent",
 	}
-	argsJSON, _ := json.Marshal(args)
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
 	request := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Arguments: json.RawMessage(argsJSON)},
 	}
 
 	result, err := tool.Call(context.Background(), request)
 	require.Error(t, err)
-	assert.Contains(t, result.Content[0].(*mcp.TextContent).Text, "not found")
+	require.Len(t, result.Content, 1)
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok, "expected TextContent")
+	assert.Contains(t, textContent.Text, "not found")
 }
 
 func TestAnalyzeTool_Call_MultiWordSentences(t *testing.T) {
 	tempDir := t.TempDir()
-	sm, _ := storage.NewStorageManager(storage.StorageConfig{
+	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath:   tempDir,
 		DefaultTTL: 24 * time.Hour,
 	})
+	require.NoError(t, err)
 
 	cvContent := []byte("backend developer with golang experience and python skills")
 	jdContent := []byte("senior golang developer needed with python and rust")
 
-	cvURI, _ := sm.SaveDocument(storage.DocumentTypeCV, cvContent, "cv.md")
-	jdURI, _ := sm.SaveDocument(storage.DocumentTypeJD, jdContent, "jd.md")
+	cvURI, err := sm.SaveDocument(storage.DocumentTypeCV, cvContent, "cv.md")
+	require.NoError(t, err)
+	jdURI, err := sm.SaveDocument(storage.DocumentTypeJD, jdContent, "jd.md")
+	require.NoError(t, err)
 
 	tool := NewAnalyzeTool(sm)
 	args := map[string]interface{}{"cv_uri": cvURI, "jd_uri": jdURI}
-	argsJSON, _ := json.Marshal(args)
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
 	request := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Arguments: json.RawMessage(argsJSON)},
 	}
@@ -248,7 +276,9 @@ func TestAnalyzeTool_Call_MultiWordSentences(t *testing.T) {
 	require.NoError(t, err)
 
 	var analyzeResult AnalyzeResult
-	json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &analyzeResult)
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok, "expected TextContent")
+	require.NoError(t, json.Unmarshal([]byte(textContent.Text), &analyzeResult))
 
 	// Should have reasonable match (golang, python overlap)
 	assert.Greater(t, analyzeResult.MatchPercentage, 10)
@@ -260,20 +290,24 @@ func TestAnalyzeTool_Call_MultiWordSentences(t *testing.T) {
 
 func TestAnalyzeTool_Call_WhitespaceHandling(t *testing.T) {
 	tempDir := t.TempDir()
-	sm, _ := storage.NewStorageManager(storage.StorageConfig{
+	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath:   tempDir,
 		DefaultTTL: 24 * time.Hour,
 	})
+	require.NoError(t, err)
 
 	cvContent := []byte("  golang   python  ")
 	jdContent := []byte("golang python")
 
-	cvURI, _ := sm.SaveDocument(storage.DocumentTypeCV, cvContent, "cv.md")
-	jdURI, _ := sm.SaveDocument(storage.DocumentTypeJD, jdContent, "jd.md")
+	cvURI, err := sm.SaveDocument(storage.DocumentTypeCV, cvContent, "cv.md")
+	require.NoError(t, err)
+	jdURI, err := sm.SaveDocument(storage.DocumentTypeJD, jdContent, "jd.md")
+	require.NoError(t, err)
 
 	tool := NewAnalyzeTool(sm)
 	args := map[string]interface{}{"cv_uri": cvURI, "jd_uri": jdURI}
-	argsJSON, _ := json.Marshal(args)
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
 	request := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Arguments: json.RawMessage(argsJSON)},
 	}
@@ -282,7 +316,9 @@ func TestAnalyzeTool_Call_WhitespaceHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	var analyzeResult AnalyzeResult
-	json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &analyzeResult)
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok, "expected TextContent")
+	require.NoError(t, json.Unmarshal([]byte(textContent.Text), &analyzeResult))
 
 	// Should be 100% match despite whitespace
 	assert.Equal(t, 100, analyzeResult.MatchPercentage)
@@ -290,20 +326,24 @@ func TestAnalyzeTool_Call_WhitespaceHandling(t *testing.T) {
 
 func TestAnalyzeTool_Call_CaseInsensitive(t *testing.T) {
 	tempDir := t.TempDir()
-	sm, _ := storage.NewStorageManager(storage.StorageConfig{
+	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath:   tempDir,
 		DefaultTTL: 24 * time.Hour,
 	})
+	require.NoError(t, err)
 
 	cvContent := []byte("GOLANG Python")
 	jdContent := []byte("golang PYTHON")
 
-	cvURI, _ := sm.SaveDocument(storage.DocumentTypeCV, cvContent, "cv.md")
-	jdURI, _ := sm.SaveDocument(storage.DocumentTypeJD, jdContent, "jd.md")
+	cvURI, err := sm.SaveDocument(storage.DocumentTypeCV, cvContent, "cv.md")
+	require.NoError(t, err)
+	jdURI, err := sm.SaveDocument(storage.DocumentTypeJD, jdContent, "jd.md")
+	require.NoError(t, err)
 
 	tool := NewAnalyzeTool(sm)
 	args := map[string]interface{}{"cv_uri": cvURI, "jd_uri": jdURI}
-	argsJSON, _ := json.Marshal(args)
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
 	request := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Arguments: json.RawMessage(argsJSON)},
 	}
@@ -312,7 +352,9 @@ func TestAnalyzeTool_Call_CaseInsensitive(t *testing.T) {
 	require.NoError(t, err)
 
 	var analyzeResult AnalyzeResult
-	json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &analyzeResult)
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok, "expected TextContent")
+	require.NoError(t, json.Unmarshal([]byte(textContent.Text), &analyzeResult))
 
 	// Should be 100% match despite case differences
 	assert.Equal(t, 100, analyzeResult.MatchPercentage)
@@ -320,10 +362,11 @@ func TestAnalyzeTool_Call_CaseInsensitive(t *testing.T) {
 
 func TestAnalyzeTool_buildSummary(t *testing.T) {
 	tempDir := t.TempDir()
-	sm, _ := storage.NewStorageManager(storage.StorageConfig{
+	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath:   tempDir,
 		DefaultTTL: 24 * time.Hour,
 	})
+	require.NoError(t, err)
 	tool := NewAnalyzeTool(sm)
 
 	result := &analysis.AnalysisResult{

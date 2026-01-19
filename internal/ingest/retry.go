@@ -2,9 +2,10 @@ package ingest
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/big"
 	"time"
 )
 
@@ -112,8 +113,16 @@ func calculateDelay(config RetryConfig, attempt int) time.Duration {
 
 // applyJitter adds random jitter to the delay to prevent thundering herd
 func applyJitter(delay time.Duration) time.Duration {
-	// Add ±25% jitter
-	jitter := (rand.Float64() - 0.5) * 0.5 // [-0.5, 0.5)
+	// Add ±25% jitter using crypto/rand for security
+	// Generate random value between -0.25 and 0.25
+	max := big.NewInt(1000000) // 1 million for precision
+	randVal, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		// Fallback to fixed jitter if crypto/rand fails
+		return delay
+	}
+	// Convert to float between -0.25 and 0.25
+	jitter := (float64(randVal.Int64())/float64(max.Int64()) - 0.5) * 0.5
 	return time.Duration(float64(delay) * (1 + jitter))
 }
 

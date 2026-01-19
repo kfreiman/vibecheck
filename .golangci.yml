@@ -1,0 +1,87 @@
+version: "2"
+
+linters:
+  # Disable all default linters and enable specific ones
+  default: none
+  enable:
+    - errcheck      # Check for unchecked errors
+    - govet         # Reports suspicious constructs
+    - ineffassign   # Detects ineffectual assignments
+    - staticcheck   # Go static analysis
+    - unused        # Check for unused code
+    - gosec         # Security issues
+    - gocyclo       # Cyclomatic complexity
+    - misspell      # Spelling mistakes
+
+  # Configure specific linter settings
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+
+    gocyclo:
+      min-complexity: 15
+
+    govet:
+      enable:
+        - shadow
+        - nilness
+
+    gosec:
+      excludes:
+        - G104  # Don't fail on unhandled errors (handled in app)
+        - G401  # Weak crypto (SHA-1) - acceptable for non-security ID generation
+
+# Run configuration
+run:
+  # Timeout for analysis
+  timeout: 5m
+
+  # Which dirs to skip
+  skip-dirs:
+    - vendor
+    - third_party
+    - testdata
+    - storage
+    - tmp
+
+  # Build tags
+  build-tags:
+    - integration
+
+  # Concurrency (0 = auto-detect)
+  concurrency: 4
+
+# Output configuration
+output:
+  formats:
+    text:
+      path: stdout
+      print-issued-lines: true
+      print-linter-name: true
+
+  show-stats: true
+
+# Issues filtering
+issues:
+  # Exclude specific issues
+  exclude:
+    - "Error return value of .((os\\.)?std(out|err)\\..*|.*Close|.*Flush|os\\.Remove(All)?|.*printf?|os\\.(Un)?Setenv). is not checked"
+
+  # Maximum issues count (0 = unlimited)
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  # Show only new issues
+  new: false
+
+  # Fix found issues if possible
+  fix: false
+
+# Severity rules
+severity:
+  default: error
+  rules:
+    - linters:
+        - errcheck
+      severity: warning

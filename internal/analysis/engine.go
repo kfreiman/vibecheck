@@ -9,7 +9,6 @@ import (
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/mapping"
 	"github.com/blevesearch/bleve/v2/search/query"
-	index "github.com/blevesearch/bleve_index_api"
 )
 
 var logger = slog.Default()
@@ -22,14 +21,14 @@ type TermScore struct {
 
 // AnalysisResult contains structured analysis output
 type AnalysisResult struct {
-	MatchPercentage  int            `json:"match_percentage"`
-	WeightedScore    int            `json:"weighted_score"`
-	SkillCoverage    float64        `json:"skill_coverage"`
-	ExperienceMatch  float64        `json:"experience_match"`
-	TopSkills        []string       `json:"top_skills"`
-	MissingSkills    []string       `json:"missing_skills"`
-	PresentSkills    []string       `json:"present_skills"`
-	CommonTerms      []TermScore    `json:"common_terms"`
+	MatchPercentage  int             `json:"match_percentage"`
+	WeightedScore    int             `json:"weighted_score"`
+	SkillCoverage    float64         `json:"skill_coverage"`
+	ExperienceMatch  float64         `json:"experience_match"`
+	TopSkills        []string        `json:"top_skills"`
+	MissingSkills    []string        `json:"missing_skills"`
+	PresentSkills    []string        `json:"present_skills"`
+	CommonTerms      []TermScore     `json:"common_terms"`
 	ScoringBreakdown *ScoreBreakdown `json:"scoring_breakdown"`
 }
 
@@ -56,23 +55,6 @@ func preprocessText(text string) string {
 	return text
 }
 
-// createTemporaryIndex creates a bleve index for the given document content
-func (e *AnalysisEngine) createTemporaryIndex(docID, content string) (bleve.Index, error) {
-	index, err := bleve.NewMemOnly(e.indexMapping)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create memory index: %w", err)
-	}
-
-	// Index the document
-	err = index.Index(docID, content)
-	if err != nil {
-		index.Close()
-		return nil, fmt.Errorf("failed to index document: %w", err)
-	}
-
-	return index, nil
-}
-
 // Analyze performs BM25-based analysis between CV and JD with skill extraction
 func (e *AnalysisEngine) Analyze(ctx context.Context, cvContent, jdContent string) (*AnalysisResult, error) {
 	logger.DebugContext(ctx, "starting BM25 analysis with skill extraction",
@@ -93,7 +75,11 @@ func (e *AnalysisEngine) Analyze(ctx context.Context, cvContent, jdContent strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to create analysis index: %w", err)
 	}
-	defer bleveIndex.Close()
+	defer func(c context.Context) {
+		if closeErr := bleveIndex.Close(); closeErr != nil {
+			logger.DebugContext(c, "error closing bleve index", "error", closeErr)
+		}
+	}(ctx)
 
 	// Index both documents
 	if err := bleveIndex.Index("cv", cvClean); err != nil {
@@ -170,7 +156,10 @@ func extractTermFrequenciesFromIndex(bleveIndex bleve.Index, docID string) map[s
 	terms := make(map[string]float64)
 
 	// Get all unique terms from the index
-	fields, _ := bleveIndex.Fields()
+	fields, fieldsErr := bleveIndex.Fields()
+	if fieldsErr != nil {
+		return terms
+	}
 	for _, field := range fields {
 		dict, err := bleveIndex.FieldDict(field)
 		if err != nil {
@@ -189,7 +178,10 @@ func extractTermFrequenciesFromIndex(bleveIndex bleve.Index, docID string) map[s
 			q := query.NewMatchQuery(term)
 			searchReq := bleve.NewSearchRequest(q)
 			searchReq.Size = 10
-			results, _ := bleveIndex.Search(searchReq)
+			results, searchErr := bleveIndex.Search(searchReq)
+			if searchErr != nil {
+				continue
+			}
 
 			// Find the specific document and extract its BM25 score for this term
 			for _, hit := range results.Hits {
@@ -199,26 +191,10 @@ func extractTermFrequenciesFromIndex(bleveIndex bleve.Index, docID string) map[s
 				}
 			}
 		}
-		dict.Close()
-	}
-
-	return terms
-}
-
-// extractTermFrequencies extracts term frequencies from a bleve document
-// (kept for potential future use, but currently unused)
-func extractTermFrequencies(doc index.Document) map[string]float64 {
-	terms := make(map[string]float64)
-
-	// Get term frequencies from all fields
-	doc.VisitFields(func(field index.Field) {
-		// Get analyzed token frequencies
-		tokenFreqs := field.AnalyzedTokenFrequencies()
-		for term, freq := range tokenFreqs {
-			// BM25 score contribution based on term frequency
-			terms[term] = float64(freq.Frequency())
+		if closeErr := dict.Close(); closeErr != nil {
+			logger.DebugContext(context.Background(), "error closing field dictionary", "error", closeErr)
 		}
-	})
+	}
 
 	return terms
 }

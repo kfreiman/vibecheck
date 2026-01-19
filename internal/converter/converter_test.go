@@ -22,7 +22,11 @@ func TestParseInput_LocalFile(t *testing.T) {
 	// Create a temp file for testing
 	tmpFile, err := os.CreateTemp("", "vibecheck-test-*.docx")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			t.Logf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	input := tmpFile.Name()
 	info := ParseInput(input)

@@ -32,21 +32,21 @@ func (h *CVResourceHandler) ReadResource(ctx context.Context, req *mcp.ReadResou
 
 	// Parse path from URI
 	path := strings.TrimPrefix(uri, "file://")
-	path, err := filepath.Abs(path)
-	if err != nil {
+	path, absErr := filepath.Abs(path)
+	if absErr != nil {
 		h.logger.ErrorContext(ctx, "failed to parse file URI",
-			"error", err,
+			"error", absErr,
 			"uri", uri,
 		)
 		return nil, mcp.ResourceNotFoundError(uri)
 	}
 
 	// Check if it's a directory - list CV files
-	if stat, err := os.Stat(path); err == nil && stat.IsDir() {
-		cvFiles, err := FindCVFiles(path)
-		if err != nil {
+	if stat, statErr := os.Stat(path); statErr == nil && stat.IsDir() {
+		cvFiles, findErr := FindCVFiles(path)
+		if findErr != nil {
 			h.logger.ErrorContext(ctx, "failed to find CV files",
-				"error", err,
+				"error", findErr,
 				"path", path,
 			)
 			return nil, mcp.ResourceNotFoundError(uri)
@@ -241,33 +241,68 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/health/ready", s.readinessHandler)
 	mux.HandleFunc("/", s.indexHandler)
 
-	// Start HTTP server
-	addr := fmt.Sprintf(":%d", s.config.Port)
+	// Configure HTTP server with timeouts for security
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%d", s.config.Port),
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
 	s.logger.InfoContext(context.Background(), "starting MCP server",
 		"port", s.config.Port,
 		"endpoints", []string{"/mcp", "/health/live", "/health/ready", "/"},
 	)
-	return http.ListenAndServe(addr, mux)
+	return server.ListenAndServe()
 }
 
 // livenessHandler checks if the server is running and accepting requests
 func (s *Server) livenessHandler(w http.ResponseWriter, r *http.Request) {
-	LivenessHandlerWithLogger(w, r, s.logger)
+	s.LivenessHandler(w, r)
 }
 
 // readinessHandler checks if the server is ready to handle requests
 func (s *Server) readinessHandler(w http.ResponseWriter, r *http.Request) {
-	ReadinessHandlerWithLogger(w, r, s.storageManager, s.logger)
+	s.ReadinessHandler(w, r)
 }
 
 // indexHandler returns the server information page
 func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	fmt.Fprintf(w, "VibeCheck MCP Server\n\n")
-	fmt.Fprintf(w, "Endpoints:\n")
-	fmt.Fprintf(w, "  POST /mcp          - Streamable HTTP transport (recommended)\n")
-	fmt.Fprintf(w, "  GET  /health/live  - Liveness probe\n")
-	fmt.Fprintf(w, "  GET  /health/ready - Readiness probe\n")
-	fmt.Fprintf(w, "  GET  /             - This help message\n\n")
-	fmt.Fprintf(w, "Server: %s %s\n", "VibeCheckServer", "2.0.0")
+	_, err := fmt.Fprintf(w, "VibeCheck MCP Server\n\n")
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to write index response", "error", err)
+		return
+	}
+	_, err = fmt.Fprintf(w, "Endpoints:\n")
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to write index response", "error", err)
+		return
+	}
+	_, err = fmt.Fprintf(w, "  POST /mcp          - Streamable HTTP transport (recommended)\n")
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to write index response", "error", err)
+		return
+	}
+	_, err = fmt.Fprintf(w, "  GET  /health/live  - Liveness probe\n")
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to write index response", "error", err)
+		return
+	}
+	_, err = fmt.Fprintf(w, "  GET  /health/ready - Readiness probe\n")
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to write index response", "error", err)
+		return
+	}
+	_, err = fmt.Fprintf(w, "  GET  /             - This help message\n\n")
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to write index response", "error", err)
+		return
+	}
+	_, err = fmt.Fprintf(w, "Server: %s %s\n", "VibeCheckServer", "2.0.0")
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to write index response", "error", err)
+		return
+	}
 }

@@ -60,7 +60,7 @@ func (p *AnalyzeFitPrompt) Handle(ctx context.Context, req *mcp.GetPromptRequest
 		return nil, fmt.Errorf("CV document not found: %s", cvURI)
 	}
 	if !p.storageManager.DocumentExists(jdURI) {
-		return nil, fmt.Errorf("Job description not found: %s", jdURI)
+		return nil, fmt.Errorf("job description not found: %s", jdURI)
 	}
 
 	// Build the analysis prompt

@@ -23,7 +23,7 @@ func TestStorageManager_NewStorageManager(t *testing.T) {
 		assert.NotNil(t, sm.fs)
 
 		// Clean up
-		os.RemoveAll("./storage")
+		require.NoError(t, os.RemoveAll("./storage"))
 	})
 
 	t.Run("uses provided config values", func(t *testing.T) {
@@ -71,7 +71,7 @@ func TestStorageManager_IsAccessible(t *testing.T) {
 		require.NoError(t, err)
 
 		// Remove base path
-		fs.RemoveAll(basePath)
+		require.NoError(t, fs.RemoveAll(basePath))
 
 		assert.False(t, sm.IsAccessible())
 	})
@@ -87,7 +87,7 @@ func TestStorageManager_IsAccessible(t *testing.T) {
 		require.NoError(t, err)
 
 		// Remove cv directory
-		fs.Remove(filepath.Join(basePath, "cv"))
+		require.NoError(t, fs.Remove(filepath.Join(basePath, "cv")))
 
 		assert.False(t, sm.IsAccessible())
 	})
@@ -103,7 +103,7 @@ func TestStorageManager_IsAccessible(t *testing.T) {
 		require.NoError(t, err)
 
 		// Remove jd directory
-		fs.Remove(filepath.Join(basePath, "jd"))
+		require.NoError(t, fs.Remove(filepath.Join(basePath, "jd")))
 
 		assert.False(t, sm.IsAccessible())
 	})

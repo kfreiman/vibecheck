@@ -21,16 +21,27 @@ func TestIngestIntegration(t *testing.T) {
 	// Use a unique temp directory for this test
 	tmpDir, err := os.MkdirTemp("", "vibecheck-integration-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	// Override the storage path
 	originalStoragePath := os.Getenv("VIBECHECK_STORAGE_PATH")
-	os.Setenv("VIBECHECK_STORAGE_PATH", tmpDir)
+	err = os.Setenv("VIBECHECK_STORAGE_PATH", tmpDir)
+	require.NoError(t, err)
 	defer func() {
 		if originalStoragePath != "" {
-			os.Setenv("VIBECHECK_STORAGE_PATH", originalStoragePath)
+			err = os.Setenv("VIBECHECK_STORAGE_PATH", originalStoragePath)
+			if err != nil {
+				t.Logf("Failed to restore VIBECHECK_STORAGE_PATH: %v", err)
+			}
 		} else {
-			os.Unsetenv("VIBECHECK_STORAGE_PATH")
+			err = os.Unsetenv("VIBECHECK_STORAGE_PATH")
+			if err != nil {
+				t.Logf("Failed to unset VIBECHECK_STORAGE_PATH: %v", err)
+			}
 		}
 	}()
 
@@ -61,7 +72,8 @@ func TestIngestIntegration(t *testing.T) {
 			"path": cvContent,
 			"type": "cv",
 		}
-		argsBytes, _ := json.Marshal(args)
+		argsBytes, err := json.Marshal(args)
+		require.NoError(t, err)
 
 		result, err := ingestTool.Call(context.Background(), &mcp.CallToolRequest{
 			Params: &mcp.CallToolParamsRaw{Arguments: argsBytes},
@@ -71,11 +83,13 @@ func TestIngestIntegration(t *testing.T) {
 		require.NotNil(t, result)
 
 		// Check result contains URI
-		textContent := result.Content[0].(*mcp.TextContent).Text
-		assert.Contains(t, textContent, "cv://", "Should return CV URI")
+		textContent, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok, "expected TextContent")
+		assert.Contains(t, textContent.Text, "cv://", "Should return CV URI")
 
 		// Verify storage stats increased
-		cvCount, jdCount, _ := storageManager.GetStorageStats()
+		cvCount, jdCount, err := storageManager.GetStorageStats()
+		require.NoError(t, err)
 		assert.Equal(t, int64(1), cvCount, "Should have 1 CV")
 		assert.Equal(t, int64(0), jdCount, "Should have 0 JDs")
 
@@ -87,7 +101,10 @@ func TestIngestIntegration(t *testing.T) {
 
 		// Read the file
 		filePath := filepath.Join(cvDir, entries[0].Name())
-		content, err := os.ReadFile(filePath)
+		// Validate the constructed path doesn't contain traversal (defensive check)
+		cleanPath := filepath.Clean(filePath)
+		require.NotContains(t, cleanPath, "..", "File path should not contain traversal")
+		content, err := os.ReadFile(cleanPath)
 		require.NoError(t, err)
 
 		// Check for frontmatter
@@ -108,16 +125,18 @@ func TestIngestIntegration(t *testing.T) {
 			"path": jdContent,
 			"type": "jd",
 		}
-		argsBytes, _ := json.Marshal(args)
+		argsBytes, err := json.Marshal(args)
+		require.NoError(t, err)
 
-		_, err := ingestTool.Call(context.Background(), &mcp.CallToolRequest{
+		_, err = ingestTool.Call(context.Background(), &mcp.CallToolRequest{
 			Params: &mcp.CallToolParamsRaw{Arguments: argsBytes},
 		})
 
 		require.NoError(t, err)
 
 		// Verify storage stats
-		cvCount, jdCount, _ := storageManager.GetStorageStats()
+		cvCount, jdCount, err := storageManager.GetStorageStats()
+		require.NoError(t, err)
 		assert.Equal(t, int64(1), cvCount, "Should still have 1 CV")
 		assert.Equal(t, int64(1), jdCount, "Should now have 1 JD")
 	})
@@ -127,14 +146,15 @@ func TestIngestIntegration(t *testing.T) {
 		// Create a temp file
 		testFile := filepath.Join(tmpDir, "test_resume.md")
 		fileContent := "# Test Resume\n\nName: John Smith\nEmail: john.smith@test.com\n"
-		err := os.WriteFile(testFile, []byte(fileContent), 0644)
+		err := os.WriteFile(testFile, []byte(fileContent), 0600)
 		require.NoError(t, err)
 
 		args := map[string]interface{}{
 			"path": testFile,
 			"type": "cv",
 		}
-		argsBytes, _ := json.Marshal(args)
+		argsBytes, err := json.Marshal(args)
+		require.NoError(t, err)
 
 		_, err = ingestTool.Call(context.Background(), &mcp.CallToolRequest{
 			Params: &mcp.CallToolParamsRaw{Arguments: argsBytes},
@@ -143,7 +163,8 @@ func TestIngestIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify storage
-		cvCount, jdCount, _ := storageManager.GetStorageStats()
+		cvCount, jdCount, err := storageManager.GetStorageStats()
+		require.NoError(t, err)
 		assert.Equal(t, int64(2), cvCount, "Should now have 2 CVs")
 		assert.Equal(t, int64(1), jdCount, "Should still have 1 JD")
 	})
@@ -157,13 +178,15 @@ func TestIngestIntegration(t *testing.T) {
 			"path": sameContent,
 			"type": "cv",
 		}
-		argsBytes1, _ := json.Marshal(args1)
-		_, err := ingestTool.Call(context.Background(), &mcp.CallToolRequest{
+		argsBytes1, err := json.Marshal(args1)
+		require.NoError(t, err)
+		_, err = ingestTool.Call(context.Background(), &mcp.CallToolRequest{
 			Params: &mcp.CallToolParamsRaw{Arguments: argsBytes1},
 		})
 		require.NoError(t, err)
 
-		cvCount1, _, _ := storageManager.GetStorageStats()
+		cvCount1, _, err := storageManager.GetStorageStats()
+		require.NoError(t, err)
 
 		// Ingest second time with same content
 		_, err = ingestTool.Call(context.Background(), &mcp.CallToolRequest{
@@ -171,7 +194,8 @@ func TestIngestIntegration(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		cvCount2, _, _ := storageManager.GetStorageStats()
+		cvCount2, _, err := storageManager.GetStorageStats()
+		require.NoError(t, err)
 
 		// Count should not increase
 		assert.Equal(t, cvCount1, cvCount2, "Same content should not create duplicate")
@@ -183,11 +207,21 @@ func TestMCPServerIngest(t *testing.T) {
 	// Create temp storage
 	tmpDir, err := os.MkdirTemp("", "vibecheck-server-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	// Set env var for server to use this dir
-	os.Setenv("VIBECHECK_STORAGE_PATH", tmpDir)
-	defer os.Unsetenv("VIBECHECK_STORAGE_PATH")
+	err = os.Setenv("VIBECHECK_STORAGE_PATH", tmpDir)
+	require.NoError(t, err)
+	defer func() {
+		err = os.Unsetenv("VIBECHECK_STORAGE_PATH")
+		if err != nil {
+			t.Logf("Failed to unset VIBECHECK_STORAGE_PATH: %v", err)
+		}
+	}()
 
 	// We can't easily test the full server with HTTP transport in a unit test,
 	// but we can verify that the handlers are properly initialized
@@ -215,7 +249,8 @@ func TestMCPServerIngest(t *testing.T) {
 		"path": cvContent,
 		"type": "cv",
 	}
-	argsBytes, _ := json.Marshal(args)
+	argsBytes, err := json.Marshal(args)
+	require.NoError(t, err)
 
 	_, err = ingestTool.Call(context.Background(), &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Arguments: argsBytes},

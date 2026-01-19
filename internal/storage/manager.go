@@ -2,14 +2,12 @@ package storage
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // StorageError represents a storage-related failure
@@ -121,12 +119,12 @@ func (sm *StorageManager) GetPath(docType DocumentType) string {
 	return filepath.Join(sm.basePath, string(docType))
 }
 
-// GenerateID generates a UUID v5 based on content hash
+// GenerateID generates a content-based identifier using SHA-256
+// Returns a hex-encoded hash for deterministic content identification
 func GenerateID(content []byte) string {
-	hash := sha1.Sum(content)
-	// Use a namespace UUID for CV/JD documents
-	namespace := uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8") // DNS namespace as base
-	return uuid.NewSHA1(namespace, hash[:]).String()
+	hash := sha256.Sum256(content)
+	// Return hex-encoded hash for deterministic, unique content identification
+	return fmt.Sprintf("%x", hash)
 }
 
 // GenerateIDFromString generates a UUID v5 from a string

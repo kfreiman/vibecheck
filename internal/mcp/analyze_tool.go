@@ -37,15 +37,15 @@ func (t *AnalyzeTool) WithLogger(logger *slog.Logger) *AnalyzeTool {
 
 // AnalyzeResult represents the structured analysis output
 type AnalyzeResult struct {
-	MatchPercentage  int            `json:"match_percentage"`
-	WeightedScore    int            `json:"weighted_score"`
-	SkillCoverage    float64        `json:"skill_coverage"`
-	ExperienceMatch  float64        `json:"experience_match"`
-	TopSkills        []string       `json:"top_skills"`
-	MissingSkills    []string       `json:"missing_skills"`
-	PresentSkills    []string       `json:"present_skills"`
+	MatchPercentage  int             `json:"match_percentage"`
+	WeightedScore    int             `json:"weighted_score"`
+	SkillCoverage    float64         `json:"skill_coverage"`
+	ExperienceMatch  float64         `json:"experience_match"`
+	TopSkills        []string        `json:"top_skills"`
+	MissingSkills    []string        `json:"missing_skills"`
+	PresentSkills    []string        `json:"present_skills"`
 	ScoringBreakdown *ScoreBreakdown `json:"scoring_breakdown"`
-	AnalysisSummary  string         `json:"analysis_summary"`
+	AnalysisSummary  string          `json:"analysis_summary"`
 }
 
 // ScoreBreakdown represents the detailed scoring breakdown

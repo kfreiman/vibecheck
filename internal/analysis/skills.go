@@ -15,10 +15,10 @@ import (
 
 // Skill represents a detected skill from CV/JD content
 type Skill struct {
-	Name       string  `json:"name"`        // Skill name (e.g., "Go", "Python")
-	Category   string  `json:"category"`    // Category (e.g., "language", "framework", "database")
-	Experience int     `json:"experience"`  // Years mentioned (0 if not specified)
-	Confidence float64 `json:"confidence"`  // 0.0-1.0 confidence score
+	Name       string  `json:"name"`       // Skill name (e.g., "Go", "Python")
+	Category   string  `json:"category"`   // Category (e.g., "language", "framework", "database")
+	Experience int     `json:"experience"` // Years mentioned (0 if not specified)
+	Confidence float64 `json:"confidence"` // 0.0-1.0 confidence score
 }
 
 // SkillsDictionary provides skill matching capabilities
@@ -42,7 +42,10 @@ func NewSkillsDictionary() *SkillsDictionary {
 func (sd *SkillsDictionary) loadDictionary() {
 	sd.once.Do(func() {
 		// Navigate from internal/analysis to project root (testdata/)
+		// This is a hardcoded relative path, not user input, so it's safe
 		dictPath := filepath.Join("..", "..", "testdata", "skills_dictionary.txt")
+
+		// #nosec G304 - This is a hardcoded relative path to testdata, not user input
 		file, err := os.Open(dictPath)
 		if err != nil {
 			slog.Warn("failed to load skills dictionary, using empty dict",
@@ -51,7 +54,11 @@ func (sd *SkillsDictionary) loadDictionary() {
 			)
 			return
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				slog.Warn("error closing skills dictionary file", "error", closeErr)
+			}
+		}()
 
 		scanner := bufio.NewScanner(file)
 		var currentCategory string
@@ -313,15 +320,20 @@ func MatchSkills(cvSkills, jdSkills []Skill) (matches []Skill, missing []Skill, 
 	return matches, missing, partialMatches
 }
 
-
 // LoadSkillsDictionary loads skills dictionary from file
 func LoadSkillsDictionary() ([]string, error) {
 	dictPath := filepath.Join("..", "..", "testdata", "skills_dictionary.txt")
+
+	// #nosec G304 - This is a hardcoded relative path to testdata, not user input
 	file, err := os.Open(dictPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open skills dictionary: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			slog.Warn("error closing skills dictionary file", "error", closeErr)
+		}
+	}()
 
 	var skills []string
 	scanner := bufio.NewScanner(file)

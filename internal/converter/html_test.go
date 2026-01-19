@@ -18,7 +18,9 @@ func TestHTMLConverter_NewHTMLConverter(t *testing.T) {
 		assert.True(t, converter.IsAvailable())
 
 		// Cleanup
-		converter.Close()
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
 	})
 }
 
@@ -26,7 +28,11 @@ func TestHTMLConverter_IsAvailable(t *testing.T) {
 	t.Run("returns true when initialized", func(t *testing.T) {
 		converter, err := NewHTMLConverter()
 		require.NoError(t, err)
-		defer converter.Close()
+		defer func() {
+			if closeErr := converter.Close(); closeErr != nil {
+				t.Logf("Failed to close converter: %v", closeErr)
+			}
+		}()
 
 		assert.True(t, converter.IsAvailable())
 	})
@@ -40,7 +46,11 @@ func TestHTMLConverter_IsAvailable(t *testing.T) {
 func TestHTMLConverter_Supports(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	tests := []struct {
 		input    string
@@ -68,7 +78,11 @@ func TestHTMLConverter_Supports(t *testing.T) {
 func TestHTMLConverter_Convert_StaticHTML(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	// Create a temporary HTML file with main content and boilerplate
 	tmpDir := t.TempDir()
@@ -106,7 +120,7 @@ func TestHTMLConverter_Convert_StaticHTML(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "cv.html")
-	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0600)
 	require.NoError(t, err)
 
 	// Test conversion
@@ -129,16 +143,24 @@ func TestHTMLConverter_Convert_StaticHTML(t *testing.T) {
 func TestHTMLConverter_Convert_MalformedHTML(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	// Malformed HTML - missing closing tags
 	htmlContent := `<html><head><title>Test</title><body><h1>Content</h1><p>Some text`
 	htmlFile := filepath.Join(tmpDir, "malformed.html")
-	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0600)
 	require.NoError(t, err)
 
 	// Should still work (playwright handles malformed HTML)
@@ -152,7 +174,11 @@ func TestHTMLConverter_Convert_MalformedHTML(t *testing.T) {
 func TestHTMLConverter_Convert_NonExistentFile(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	_, err = converter.Convert(context.Background(), "/nonexistent/file.html")
 	require.Error(t, err)
@@ -165,27 +191,40 @@ func TestHTMLConverter_Convert_NonExistentFile(t *testing.T) {
 func TestHTMLConverter_Convert_EmptyHTML(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	htmlContent := `<!DOCTYPE html><html><head><title></title></head><body></body></html>`
 	htmlFile := filepath.Join(tmpDir, "empty.html")
-	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0600)
 	require.NoError(t, err)
 
 	// Should handle gracefully
-	_, err = converter.Convert(context.Background(), htmlFile)
+	_, convertErr := converter.Convert(context.Background(), htmlFile)
 	// May succeed with empty result or error - both are acceptable
 	// Just verify it doesn't panic
+	_ = convertErr
 }
 
 func TestHTMLConverter_Convert_PathTraversal(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	// Test path traversal attempts
 	tests := []string{
@@ -211,11 +250,19 @@ func TestHTMLConverter_Convert_URL(t *testing.T) {
 	// We'll use a simple HTML file served via file:// URL
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	htmlContent := `<!DOCTYPE html>
 <html>
@@ -229,7 +276,7 @@ func TestHTMLConverter_Convert_URL(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "url-test.html")
-	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0600)
 	require.NoError(t, err)
 
 	// Use file:// URL
@@ -272,11 +319,19 @@ func TestHTMLConverter_Close(t *testing.T) {
 func TestHTMLConverter_convertFile(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	// Create test HTML
 	htmlContent := `<!DOCTYPE html>
@@ -290,7 +345,7 @@ func TestHTMLConverter_convertFile(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "test.html")
-	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0600)
 	require.NoError(t, err)
 
 	t.Run("extracts content from valid file", func(t *testing.T) {
@@ -318,11 +373,19 @@ func TestHTMLConverter_convertFile(t *testing.T) {
 func TestHTMLConverter_convertURL(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	tmpDir, err := os.MkdirTemp("", "html-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	// Create test HTML for file:// URL
 	htmlContent := `<!DOCTYPE html>
@@ -336,7 +399,7 @@ func TestHTMLConverter_convertURL(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "url-test.html")
-	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0600)
 	require.NoError(t, err)
 
 	t.Run("extracts content from file URL", func(t *testing.T) {
@@ -351,7 +414,11 @@ func TestHTMLConverter_convertURL(t *testing.T) {
 func TestHTMLConverter_renderWithPlaywright(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	tmpDir := t.TempDir()
 
@@ -367,7 +434,7 @@ func TestHTMLConverter_renderWithPlaywright(t *testing.T) {
 </html>`
 
 	htmlFile := filepath.Join(tmpDir, "playwright.html")
-	err = os.WriteFile(htmlFile, []byte(htmlContent), 0644)
+	err = os.WriteFile(htmlFile, []byte(htmlContent), 0600)
 	require.NoError(t, err)
 
 	t.Run("renders and extracts content", func(t *testing.T) {
@@ -382,7 +449,11 @@ func TestHTMLConverter_renderWithPlaywright(t *testing.T) {
 func TestHTMLConverter_SupportsInputTypes(t *testing.T) {
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	// Test that Supports correctly identifies different input types
 	tests := []struct {
@@ -411,7 +482,11 @@ func TestHTMLConverter_Integration(t *testing.T) {
 	// Integration test that verifies the full workflow
 	converter, err := NewHTMLConverter()
 	require.NoError(t, err)
-	defer converter.Close()
+	defer func() {
+		if closeErr := converter.Close(); closeErr != nil {
+			t.Logf("Failed to close converter: %v", closeErr)
+		}
+	}()
 
 	tmpDir := t.TempDir()
 
@@ -485,7 +560,7 @@ func TestHTMLConverter_Integration(t *testing.T) {
 </html>`
 
 	cvFile := filepath.Join(tmpDir, "jane-smith-cv.html")
-	err = os.WriteFile(cvFile, []byte(cvHTML), 0644)
+	err = os.WriteFile(cvFile, []byte(cvHTML), 0600)
 	require.NoError(t, err)
 
 	// Test conversion

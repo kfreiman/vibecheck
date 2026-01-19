@@ -21,7 +21,11 @@ func TestIngestDocumentTool_Call(t *testing.T) {
 	// Create temp storage directory
 	tmpDir, err := os.MkdirTemp("", "vibecheck-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	// Create storage manager
 	config := storage.StorageConfig{
@@ -45,14 +49,15 @@ func TestIngestDocumentTool_Call(t *testing.T) {
 		// Create a test file
 		testFile := filepath.Join(tmpDir, "test_cv.md")
 		cvContent := "# Test CV\n\nName: John Doe\nEmail: john@example.com\nPhone: +1234567890\n"
-		err := os.WriteFile(testFile, []byte(cvContent), 0644)
+		err := os.WriteFile(testFile, []byte(cvContent), 0600)
 		require.NoError(t, err)
 
 		args := map[string]interface{}{
 			"path": testFile,
 			"type": "cv",
 		}
-		argsBytes, _ := json.Marshal(args)
+		argsBytes, err := json.Marshal(args)
+		require.NoError(t, err)
 
 		request := &mcp.CallToolRequest{
 			Params: &mcp.CallToolParamsRaw{
@@ -63,11 +68,13 @@ func TestIngestDocumentTool_Call(t *testing.T) {
 		result, err := ingestTool.Call(context.Background(), request)
 		require.NoError(t, err, "Expected no error from ingest tool")
 		require.NotNil(t, result)
+		require.NotEmpty(t, result.Content)
 
 		// Check that result contains URI
-		textContent := result.Content[0].(*mcp.TextContent).Text
-		assert.Contains(t, textContent, "URI:", "Result should contain URI")
-		assert.Contains(t, textContent, "cv://", "URI should start with cv://")
+		textContent, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok, "Expected TextContent")
+		assert.Contains(t, textContent.Text, "URI:", "Result should contain URI")
+		assert.Contains(t, textContent.Text, "cv://", "URI should start with cv://")
 
 		// Extract URI from result text
 		// Format: "URI: cv://<uuid>"
@@ -79,14 +86,14 @@ func TestIngestDocumentTool_Call(t *testing.T) {
 		}
 		for _, line := range lines {
 			if idx := len(line); idx > 0 {
-				for i := 0; i < len(textContent)-idx; i++ {
-					if textContent[i:i+idx] == line {
+				for i := 0; i < len(textContent.Text)-idx; i++ {
+					if textContent.Text[i:i+idx] == line {
 						// Extract until end of line or space
 						end := i + idx
-						for end < len(textContent) && textContent[end] != '\n' && textContent[end] != ' ' {
+						for end < len(textContent.Text) && textContent.Text[end] != '\n' && textContent.Text[end] != ' ' {
 							end++
 						}
-						uri = textContent[i:end]
+						uri = textContent.Text[i:end]
 						break
 					}
 				}
@@ -108,7 +115,8 @@ func TestIngestDocumentTool_Call(t *testing.T) {
 			"path": cvContent,
 			"type": "cv",
 		}
-		argsBytes, _ := json.Marshal(args)
+		argsBytes, err := json.Marshal(args)
+		require.NoError(t, err)
 
 		request := &mcp.CallToolRequest{
 			Params: &mcp.CallToolParamsRaw{
@@ -119,9 +127,11 @@ func TestIngestDocumentTool_Call(t *testing.T) {
 		result, err := ingestTool.Call(context.Background(), request)
 		require.NoError(t, err, "Expected no error from ingest tool")
 		require.NotNil(t, result)
+		require.NotEmpty(t, result.Content)
 
-		textContent := result.Content[0].(*mcp.TextContent).Text
-		assert.Contains(t, textContent, "URI:", "Result should contain URI")
+		textContent, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok, "Expected TextContent")
+		assert.Contains(t, textContent.Text, "URI:", "Result should contain URI")
 
 		// Check storage stats
 		cvCount, _, err := storageManager.GetStorageStats()
@@ -137,7 +147,8 @@ func TestIngestDocumentTool_Call(t *testing.T) {
 			"path": jdContent,
 			"type": "jd",
 		}
-		argsBytes, _ := json.Marshal(args)
+		argsBytes, err := json.Marshal(args)
+		require.NoError(t, err)
 
 		request := &mcp.CallToolRequest{
 			Params: &mcp.CallToolParamsRaw{
@@ -148,9 +159,11 @@ func TestIngestDocumentTool_Call(t *testing.T) {
 		result, err := ingestTool.Call(context.Background(), request)
 		require.NoError(t, err, "Expected no error from ingest tool")
 		require.NotNil(t, result)
+		require.NotEmpty(t, result.Content)
 
-		textContent := result.Content[0].(*mcp.TextContent).Text
-		assert.Contains(t, textContent, "jd://", "JD URI should start with jd://")
+		textContent, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok, "Expected TextContent")
+		assert.Contains(t, textContent.Text, "jd://", "JD URI should start with jd://")
 
 		// Check storage stats
 		_, jdCount, err := storageManager.GetStorageStats()
@@ -163,7 +176,11 @@ func TestStorageAfterIngest(t *testing.T) {
 	// This test reproduces the exact bug report scenario
 	tmpDir, err := os.MkdirTemp("", "vibecheck-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	config := storage.StorageConfig{BasePath: tmpDir}
 	storageManager, err := storage.NewStorageManager(config)
@@ -187,7 +204,8 @@ func TestStorageAfterIngest(t *testing.T) {
 		"path": cvContent,
 		"type": "cv",
 	}
-	argsBytes, _ := json.Marshal(args)
+	argsBytes, err := json.Marshal(args)
+	require.NoError(t, err)
 
 	request := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{
@@ -198,6 +216,7 @@ func TestStorageAfterIngest(t *testing.T) {
 	result, err := ingestTool.Call(context.Background(), request)
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.NotEmpty(t, result.Content)
 
 	// Get stats after ingestion
 	afterCV, afterJD, err := storageManager.GetStorageStats()

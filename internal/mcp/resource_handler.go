@@ -80,7 +80,11 @@ func (h *StorageResourceHandler) ReadResource(ctx context.Context, req *mcp.Read
 
 // ListResources lists all available resources
 func (h *StorageResourceHandler) ListResources() []*mcp.Resource {
-	cvUUIDs, jdUUIDs, _ := h.storageManager.ListAllDocuments()
+	cvUUIDs, jdUUIDs, err := h.storageManager.ListAllDocuments()
+	if err != nil {
+		h.logger.Error("failed to list documents", "error", err)
+		return []*mcp.Resource{}
+	}
 
 	resources := []*mcp.Resource{}
 

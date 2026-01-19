@@ -102,7 +102,16 @@ func (t *CleanupStorageTool) Call(ctx context.Context, request *mcp.CallToolRequ
 	}
 
 	// Get storage stats after cleanup
-	cvCountAfter, jdCountAfter, _ := t.storageManager.GetStorageStats()
+	cvCountAfter, jdCountAfter, err := t.storageManager.GetStorageStats()
+	if err != nil {
+		t.logger.ErrorContext(ctx, "failed to get storage stats after cleanup",
+			"error", err,
+			"operation", "cleanup_storage",
+		)
+		// Continue with cleanup even if stats fail - just use the before counts
+		cvCountAfter = cvCountBefore
+		jdCountAfter = jdCountBefore
+	}
 
 	ttlDisplay := "default (24h)"
 	if ttl > 0 {

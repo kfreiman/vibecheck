@@ -2,23 +2,10 @@ services:
   ollama:
     container_name: ollama_dev
     image: ollama/ollama:latest
-    environment:
-      OLLAMA_HOST: 0.0.0.0
     volumes:
-      - ollama:/root/.ollama
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+      - ollama_data:/root/.ollama
+    ports:
+      - 11434:11434
 
   vibecheck:
     container_name: vibecheck_dev
@@ -49,10 +36,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
-    depends_on:
-      ollama:
-        condition: service_healthy
 
 volumes:
   go-modules:
-  ollama:
+    driver: local
+  ollama_data:
+    driver: local

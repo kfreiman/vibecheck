@@ -151,8 +151,25 @@ func (i *DocumentIngestor) getMarkdownContentWithRetry(ctx context.Context, path
 func (i *DocumentIngestor) readLocalFileWithFallback(path string) (string, error) {
 	var content string
 
+	// Path validation is already done by validatePath() in Ingest()
+	// but we add additional check here for defense in depth
+	if strings.Contains(path, "..") {
+		return "", &SecurityError{
+			Type:    "path_traversal",
+			Details: fmt.Sprintf("path contains traversal sequence: %s", path),
+		}
+	}
+
+	if strings.Contains(path, "\x00") {
+		return "", &SecurityError{
+			Type:    "null_byte",
+			Details: "path contains null bytes",
+		}
+	}
+
 	// Retry reading the file
 	err := RetryWithExponentialBackoff(context.Background(), 3, 500*time.Millisecond, func(attempt int) error {
+		// #nosec G304 - path has been validated for traversal and null bytes
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return &StorageError{

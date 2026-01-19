@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,11 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLivenessHandler(t *testing.T) {
+func TestServer_LivenessHandler(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	server := &Server{logger: logger}
+
 	req := httptest.NewRequest("GET", "/health/live", nil)
 	w := httptest.NewRecorder()
 
-	LivenessHandler(w, req)
+	server.LivenessHandler(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), `"status":"healthy"`)
@@ -25,20 +29,29 @@ func TestLivenessHandler(t *testing.T) {
 	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 }
 
-func TestReadinessHandler_StorageAccessible(t *testing.T) {
+func TestServer_ReadinessHandler_StorageAccessible(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "health-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath: tmpDir,
 	})
 	require.NoError(t, err)
 
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	server := &Server{
+		storageManager: sm,
+		logger:         logger,
+	}
+
 	req := httptest.NewRequest("GET", "/health/ready", nil)
 	w := httptest.NewRecorder()
-	handler := ReadinessHandlerFunc(sm)
-	handler(w, req)
+	server.ReadinessHandler(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), `"status":"healthy"`)
@@ -46,10 +59,14 @@ func TestReadinessHandler_StorageAccessible(t *testing.T) {
 	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 }
 
-func TestReadinessHandler_StorageInaccessible(t *testing.T) {
+func TestServer_ReadinessHandler_StorageInaccessible(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "health-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	sm, err := storage.NewStorageManager(storage.StorageConfig{
 		BasePath: tmpDir,
@@ -58,12 +75,18 @@ func TestReadinessHandler_StorageInaccessible(t *testing.T) {
 
 	// Remove the cv directory to make storage inaccessible
 	cvPath := filepath.Join(tmpDir, "cv")
-	os.RemoveAll(cvPath)
+	err = os.RemoveAll(cvPath)
+	require.NoError(t, err)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	server := &Server{
+		storageManager: sm,
+		logger:         logger,
+	}
 
 	req := httptest.NewRequest("GET", "/health/ready", nil)
 	w := httptest.NewRecorder()
-	handler := ReadinessHandlerFunc(sm)
-	handler(w, req)
+	server.ReadinessHandler(w, req)
 
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 	assert.Contains(t, w.Body.String(), `"status":"unhealthy"`)

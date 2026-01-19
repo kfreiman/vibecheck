@@ -17,7 +17,7 @@ test-cover:
 	go test ./... -coverprofile=coverage.out -covermode=atomic
 	go tool cover -func=coverage.out
 
-# Lint code
+# Lint code (uses .golangci.yml configuration)
 lint:
 	golangci-lint run ./...
 

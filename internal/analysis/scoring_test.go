@@ -33,11 +33,11 @@ func TestScoringWeights_ValidateWeights(t *testing.T) {
 		weights   ScoringWeights
 		shouldErr bool
 	}{
-		{NewDefaultWeights(), false}, // 0.40 + 0.30 + 0.20 + 0.10 = 1.0
-		{ScoringWeights{0.5, 0.3, 0.1, 0.1}, false}, // Sum: 1.0
+		{NewDefaultWeights(), false},                  // 0.40 + 0.30 + 0.20 + 0.10 = 1.0
+		{ScoringWeights{0.5, 0.3, 0.1, 0.1}, false},   // Sum: 1.0
 		{ScoringWeights{0.8, 0.1, 0.05, 0.05}, false}, // Sum: 1.0
-		{ScoringWeights{0.6, 0.3, 0.3, 0.0}, true},   // Sum: 1.2 (too high)
-		{ScoringWeights{0.2, 0.1, 0.05, 0.05}, true}, // Sum: 0.4 (too low)
+		{ScoringWeights{0.6, 0.3, 0.3, 0.0}, true},    // Sum: 1.2 (too high)
+		{ScoringWeights{0.2, 0.1, 0.05, 0.05}, true},  // Sum: 0.4 (too low)
 	}
 
 	for _, tt := range tests {
@@ -65,7 +65,7 @@ func TestScoringWeights_Normalize(t *testing.T) {
 			ScoringWeights{0.5, 0.5, 0.0, 0.0},
 		},
 		{
-			ScoringWeights{0.8, 0.4, 0.2, 0.2}, // Sum: 1.6
+			ScoringWeights{0.8, 0.4, 0.2, 0.2},      // Sum: 1.6
 			ScoringWeights{0.5, 0.25, 0.125, 0.125}, // Normalized to 1.0
 		},
 	}
@@ -103,13 +103,13 @@ func TestCalculateWeightedScore(t *testing.T) {
 	weights := NewDefaultWeights()
 
 	tests := []struct {
-		name             string
-		skillCoverage    float64
-		experienceMatch  float64
-		termSimilarity   float64
-		overallMatch     float64
-		expectedMin      int
-		expectedMax      int
+		name            string
+		skillCoverage   float64
+		experienceMatch float64
+		termSimilarity  float64
+		overallMatch    float64
+		expectedMin     int
+		expectedMax     int
 	}{
 		{
 			name:            "Perfect score",
@@ -186,7 +186,7 @@ func TestCalculateWeightedScore_Clamping(t *testing.T) {
 
 	// Test with values outside 0-1 range (should be clamped)
 	score, _ := CalculateWeightedScore(
-		1.5, // Should clamp to 1.0
+		1.5,  // Should clamp to 1.0
 		-0.5, // Should clamp to 0.0
 		0.5,
 		0.5,
@@ -228,10 +228,10 @@ func TestCalculateWeightedScore_EdgeCases(t *testing.T) {
 
 func TestCalculateExperienceMatch(t *testing.T) {
 	tests := []struct {
-		name      string
-		cvSkills  []Skill
-		jdSkills  []Skill
-		expected  float64
+		name     string
+		cvSkills []Skill
+		jdSkills []Skill
+		expected float64
 	}{
 		{
 			name: "Exact experience match",
@@ -362,7 +362,7 @@ func TestCalculateTermSimilarity(t *testing.T) {
 		{0.5, 0.5},
 		{1.0, 1.0},
 		{0.0, 0.0},
-		{1.5, 1.0}, // Clamped
+		{1.5, 1.0},  // Clamped
 		{-0.5, 0.0}, // Clamped
 	}
 
@@ -382,7 +382,7 @@ func TestCalculateOverallMatch(t *testing.T) {
 		{0.5, 0.5},
 		{1.0, 1.0},
 		{0.0, 0.0},
-		{1.5, 1.0}, // Clamped
+		{1.5, 1.0},  // Clamped
 		{-0.5, 0.0}, // Clamped
 	}
 
@@ -396,9 +396,9 @@ func TestCalculateOverallMatch(t *testing.T) {
 
 func TestNormalizeScoreToPercentage(t *testing.T) {
 	tests := []struct {
-		rawScore     float64
-		maxPossible  float64
-		expected     int
+		rawScore    float64
+		maxPossible float64
+		expected    int
 	}{
 		{50, 100, 50},
 		{75, 100, 75},

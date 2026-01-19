@@ -94,4 +94,3 @@ Use this URI in the analyze_fit prompt to analyze the document.`, uri, args.Type
 		},
 	}, nil
 }
-

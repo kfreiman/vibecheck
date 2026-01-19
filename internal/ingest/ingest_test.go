@@ -116,7 +116,11 @@ func TestDocumentIngestor_Ingest(t *testing.T) {
 	// Create temp storage directory
 	tmpDir, err := os.MkdirTemp("", "ingest-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	// Create storage manager
 	config := storage.StorageConfig{
@@ -161,7 +165,7 @@ func TestDocumentIngestor_Ingest(t *testing.T) {
 		// Create a test file
 		testFile := filepath.Join(tmpDir, "test_cv.md")
 		cvContent := "# Test CV\n\nName: Jane Smith\n"
-		err := os.WriteFile(testFile, []byte(cvContent), 0644)
+		err := os.WriteFile(testFile, []byte(cvContent), 0600)
 		require.NoError(t, err)
 
 		uri, err := ingestor.Ingest(context.Background(), testFile, "cv")
@@ -199,7 +203,11 @@ func TestDocumentIngestor_Deduplication(t *testing.T) {
 	// Create temp storage directory
 	tmpDir, err := os.MkdirTemp("", "ingest-dedup-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	// Create storage manager
 	config := storage.StorageConfig{
@@ -242,7 +250,11 @@ func TestDocumentIngestor_Deduplication(t *testing.T) {
 func TestDocumentIngestor_EmptyPath(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "ingest-empty-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp dir: %v", removeErr)
+		}
+	}()
 
 	config := storage.StorageConfig{BasePath: tmpDir}
 	storageManager, err := storage.NewStorageManager(config)

@@ -6,10 +6,10 @@ import (
 
 // Config holds the configuration for the MCP server
 type Config struct {
-	StoragePath string        `env:"STORAGE_PATH" env-default:"./storage" env-description:"Storage directory path"`
-	StorageTTL  string        `env:"STORAGE_TTL" env-default:"24h" env-description:"Default TTL for document cleanup (e.g., 24h, 1h30m)"`
-	Port        int           `env:"PORT" env-default:"8080" env-description:"HTTP server port"`
-	LogDebug    bool          `env:"DEBUG" env-default:"false" env-description:"Enable debug logging"`
+	StoragePath string `env:"STORAGE_PATH" env-default:"./storage" env-description:"Storage directory path"`
+	StorageTTL  string `env:"STORAGE_TTL" env-default:"24h" env-description:"Default TTL for document cleanup (e.g., 24h, 1h30m)"`
+	Port        int    `env:"PORT" env-default:"8080" env-description:"HTTP server port"`
+	LogDebug    bool   `env:"DEBUG" env-default:"false" env-description:"Enable debug logging"`
 }
 
 // LoadConfig loads configuration from environment variables

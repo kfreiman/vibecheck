@@ -3,6 +3,7 @@ package converter
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -98,24 +99,40 @@ func DownloadFile(ctx context.Context, url string, tempDir string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Debug("error closing response body", "error", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", &HTTPError{StatusCode: resp.StatusCode, URL: url}
 	}
 
+	// Validate tempDir is safe (prevent directory traversal via tempDir)
+	if strings.Contains(tempDir, "..") {
+		return "", &PathValidationError{Path: tempDir, Reason: "path traversal not allowed"}
+	}
+
 	// Create temp file
 	tmpFile := filepath.Join(tempDir, "download_"+randomString(12))
+	// #nosec G304 - tempDir is validated for path traversal, and filename is random
 	f, err := os.Create(tmpFile)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			slog.Debug("error closing temp file", "error", closeErr)
+		}
+	}()
 
 	// Write content
 	_, err = io.Copy(f, resp.Body)
 	if err != nil {
-		os.Remove(tmpFile)
+		if removeErr := os.Remove(tmpFile); removeErr != nil {
+			slog.Debug("error removing temp file", "error", removeErr)
+		}
 		return "", err
 	}
 
