@@ -37,11 +37,24 @@ func (t *AnalyzeTool) WithLogger(logger *slog.Logger) *AnalyzeTool {
 
 // AnalyzeResult represents the structured analysis output
 type AnalyzeResult struct {
-	MatchPercentage int      `json:"match_percentage"`
-	SkillCoverage   float64  `json:"skill_coverage"`
-	TopSkills       []string `json:"top_skills"`
-	MissingSkills   []string `json:"missing_skills"`
-	AnalysisSummary string   `json:"analysis_summary"`
+	MatchPercentage  int            `json:"match_percentage"`
+	WeightedScore    int            `json:"weighted_score"`
+	SkillCoverage    float64        `json:"skill_coverage"`
+	ExperienceMatch  float64        `json:"experience_match"`
+	TopSkills        []string       `json:"top_skills"`
+	MissingSkills    []string       `json:"missing_skills"`
+	PresentSkills    []string       `json:"present_skills"`
+	ScoringBreakdown *ScoreBreakdown `json:"scoring_breakdown"`
+	AnalysisSummary  string         `json:"analysis_summary"`
+}
+
+// ScoreBreakdown represents the detailed scoring breakdown
+type ScoreBreakdown struct {
+	SkillCoverage  float64 `json:"skill_coverage"`
+	Experience     float64 `json:"experience_match"`
+	TermSimilarity float64 `json:"term_similarity"`
+	OverallMatch   float64 `json:"overall_match"`
+	WeightedTotal  int     `json:"weighted_total"`
 }
 
 // Call implements the MCP tool interface
@@ -147,13 +160,29 @@ func (t *AnalyzeTool) Call(ctx context.Context, request *mcp.CallToolRequest) (*
 	// Build analysis summary
 	summary := t.buildSummary(analysisResult)
 
+	// Create scoring breakdown
+	var scoringBreakdown *ScoreBreakdown
+	if analysisResult.ScoringBreakdown != nil {
+		scoringBreakdown = &ScoreBreakdown{
+			SkillCoverage:  analysisResult.ScoringBreakdown.SkillCoverage,
+			Experience:     analysisResult.ScoringBreakdown.Experience,
+			TermSimilarity: analysisResult.ScoringBreakdown.TermSimilarity,
+			OverallMatch:   analysisResult.ScoringBreakdown.OverallMatch,
+			WeightedTotal:  analysisResult.ScoringBreakdown.WeightedTotal,
+		}
+	}
+
 	// Create structured result
 	result := AnalyzeResult{
-		MatchPercentage: analysisResult.MatchPercentage,
-		SkillCoverage:   analysisResult.SkillCoverage,
-		TopSkills:       analysisResult.TopSkills,
-		MissingSkills:   analysisResult.MissingSkills,
-		AnalysisSummary: summary,
+		MatchPercentage:  analysisResult.MatchPercentage,
+		WeightedScore:    analysisResult.WeightedScore,
+		SkillCoverage:    analysisResult.SkillCoverage,
+		ExperienceMatch:  analysisResult.ExperienceMatch,
+		TopSkills:        analysisResult.TopSkills,
+		MissingSkills:    analysisResult.MissingSkills,
+		PresentSkills:    analysisResult.PresentSkills,
+		ScoringBreakdown: scoringBreakdown,
+		AnalysisSummary:  summary,
 	}
 
 	// Return as structured JSON
@@ -188,10 +217,34 @@ func (t *AnalyzeTool) buildSummary(result *analysis.AnalysisResult) string {
 	sb.WriteString("CV/Job Description Analysis Report\n")
 	sb.WriteString("==================================\n\n")
 
-	sb.WriteString(fmt.Sprintf("Match Percentage: %d%%\n", result.MatchPercentage))
-	sb.WriteString(fmt.Sprintf("Skill Coverage: %.1f%%\n", result.SkillCoverage*100))
-	sb.WriteString(fmt.Sprintf("Common Terms: %d\n", len(result.CommonTerms)))
-	sb.WriteString(fmt.Sprintf("Missing Skills: %d\n\n", len(result.MissingSkills)))
+	// Overall scores
+	sb.WriteString("Overall Scores:\n")
+	sb.WriteString(fmt.Sprintf("  Match Percentage: %d%%\n", result.MatchPercentage))
+	sb.WriteString(fmt.Sprintf("  Weighted Score: %d/100\n", result.WeightedScore))
+	sb.WriteString(fmt.Sprintf("  Skill Coverage: %.1f%%\n", result.SkillCoverage*100))
+	sb.WriteString(fmt.Sprintf("  Experience Match: %.1f%%\n", result.ExperienceMatch*100))
+	sb.WriteString("\n")
+
+	// Scoring breakdown
+	if result.ScoringBreakdown != nil {
+		sb.WriteString("Scoring Breakdown:\n")
+		sb.WriteString(fmt.Sprintf("  Skill Coverage (40%%): %.1f%%\n", result.ScoringBreakdown.SkillCoverage*100))
+		sb.WriteString(fmt.Sprintf("  Experience (30%%): %.1f%%\n", result.ScoringBreakdown.Experience*100))
+		sb.WriteString(fmt.Sprintf("  Term Similarity (20%%): %.1f%%\n", result.ScoringBreakdown.TermSimilarity*100))
+		sb.WriteString(fmt.Sprintf("  Overall Match (10%%): %.1f%%\n", result.ScoringBreakdown.OverallMatch*100))
+		sb.WriteString("\n")
+	}
+
+	// Skills
+	if len(result.PresentSkills) > 0 {
+		sb.WriteString("Present Skills (CV):\n")
+		for i, skill := range result.PresentSkills {
+			if i < 10 { // Show top 10
+				sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, skill))
+			}
+		}
+		sb.WriteString("\n")
+	}
 
 	if len(result.TopSkills) > 0 {
 		sb.WriteString("Top Matching Skills:\n")
@@ -204,15 +257,17 @@ func (t *AnalyzeTool) buildSummary(result *analysis.AnalysisResult) string {
 	if len(result.MissingSkills) > 0 {
 		sb.WriteString("Missing Skills (gaps to address):\n")
 		for i, skill := range result.MissingSkills {
-			sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, skill))
+			if i < 10 { // Show top 10
+				sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, skill))
+			}
 		}
 		sb.WriteString("\n")
 	}
 
 	if len(result.CommonTerms) > 0 {
-		sb.WriteString("Detailed Term Analysis:\n")
+		sb.WriteString("Detailed Term Analysis (Top 5):\n")
 		for i, ts := range result.CommonTerms {
-			if i < 5 { // Show top 5 common terms
+			if i < 5 {
 				sb.WriteString(fmt.Sprintf("  %s (score: %.2f)\n", ts.Term, ts.Score))
 			}
 		}

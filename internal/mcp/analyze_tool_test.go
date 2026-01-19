@@ -74,10 +74,14 @@ func TestAnalyzeTool_Call_BasicAnalysis(t *testing.T) {
 	// Verify analysis results
 	assert.Greater(t, analyzeResult.MatchPercentage, 0)
 	assert.Less(t, analyzeResult.MatchPercentage, 100)
+	assert.Greater(t, analyzeResult.WeightedScore, 0)
+	assert.LessOrEqual(t, analyzeResult.WeightedScore, 100)
 	assert.Greater(t, analyzeResult.SkillCoverage, 0.0)
+	assert.Greater(t, analyzeResult.ExperienceMatch, 0.0)
 	assert.Contains(t, analyzeResult.TopSkills, "golang")
 	assert.Contains(t, analyzeResult.MissingSkills, "java")
 	assert.NotEmpty(t, analyzeResult.AnalysisSummary)
+	assert.NotNil(t, analyzeResult.ScoringBreakdown)
 }
 
 func TestAnalyzeTool_Call_IdenticalDocuments(t *testing.T) {

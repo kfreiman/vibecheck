@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-01-15)
 
 **Core value:** Enable recruiters and hiring managers to quickly assess CV/job description fit through intelligent document analysis, reducing screening time by 40% while improving interview quality.
-**Current focus:** Phase 4 — Deployment & CI/CD
+**Current focus:** Phase 5 — Analysis Intelligence (Complete)
 
 ## Current Position
 
 Phase: 5 of 5 (Analysis Intelligence)
-Plan: 01 of 1 (In Progress)
-Status: 05-01 complete, analysis engine ready for integration
-Last activity: 2026-01-17 — Completed 05-01 (5 tasks, 6 commits)
+Plan: 02 of 2 (Complete)
+Status: 05-02 complete, analysis engine enhanced with skill extraction and weighted scoring
+Last activity: 2026-01-19 — Completed 05-02 (6 tasks, 4 commits)
 
 Progress: ████████████████ 100% (Phase 1) / 100% (Phase 2) / 100% (Phase 3) / 100% (Phase 4) / 100% (Phase 5) / 100% (Total)
 
@@ -61,7 +61,8 @@ Progress: ████████████████ 100% (Phase 1) / 100%
 
 **Phase 5 Plans:**
 
-- Plan 05-01: Analysis Intelligence (5 tasks, 4 commits) 🔄
+- Plan 05-01: Analysis Intelligence (5 tasks, 4 commits) ✅
+- Plan 05-02: Skill Coverage & Weighted Scoring (6 tasks, 4 commits) ✅
 
 ## Phase 2 Plan Summary
 
@@ -84,9 +85,9 @@ Progress: ████████████████ 100% (Phase 1) / 100%
 
 **Velocity:**
 
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: ~30 minutes
-- Total execution time: ~5.5 hours
+- Total execution time: ~6.3 hours
 
 **By Phase:**
 
@@ -96,12 +97,12 @@ Progress: ████████████████ 100% (Phase 1) / 100%
 | 2 (Observability) | 2 | 9 tasks | ~6 min/task |
 | 3 (CV Parsing) | 2 | 10 tasks | ~10 min/task |
 | 4 (Deployment) | 3 | 12 tasks | ~10 min/task |
-| 5 (Analysis) | 1 | 5 tasks | ~12 min/task |
+| 5 (Analysis) | 2 | 11 tasks | ~11 min/task |
 
 **Recent Trend:**
 
-- Last 8 plans: 05-01 🔄, 04-03 ✅, 04-02 ✅, 04-01 ✅, 03-02 ✅, 03-01 ✅, 02-02 ✅, 02-01 ✅
-- Trend: All phases complete! Phase 5 analysis engine ready for integration testing
+- Last 8 plans: 05-02 ✅, 05-01 ✅, 04-03 ✅, 04-02 ✅, 04-01 ✅, 03-02 ✅, 03-01 ✅, 02-02 ✅
+- Trend: All phases complete! Phase 5 analysis engine enhanced with skill extraction and weighted scoring
 
 ## Accumulated Context
 
@@ -197,6 +198,22 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - Trade-off: Requires additional text processing step in MCP tool
 - Future: Ensures accurate match percentages and skill detection
 
+**05-02: LLM-based Skill Extraction (2026-01-19)**
+
+- Decision: Dictionary-based skill matching with LLM-style langextractor pattern
+- Rationale: 324-line dictionary with 100+ technologies provides structured reference for skill identification
+- Impact: Accurate skill detection with confidence scoring and experience parsing
+- Trade-off: Dictionary maintenance required for new technologies
+- Future: Ready for integration testing and production CV/JD matching
+
+**05-02: Weighted Scoring Algorithm (2026-01-19)**
+
+- Decision: Configurable multi-factor scoring (40% skill coverage, 30% experience, 20% term similarity, 10% overall match)
+- Rationale: Multiple dimensions provide comprehensive assessment beyond simple text matching
+- Impact: Balanced scoring with extensible weights for different use cases
+- Trade-off: Requires skill extraction to be accurate for meaningful scores
+- Future: Ready for integration testing with realistic CV/JD datasets
+
 ### Pending Todos
 
 - [ ] 2026-01-16: Add/rewrite tests for phase 03 (testing) - 10 test scenarios for PDF and HTML converters
@@ -207,8 +224,8 @@ None. All tasks completed successfully.
 
 ## Session Continuity
 
-Last session: 2026-01-17 (current)
-Stopped at: Completed 05-01 (Analysis Intelligence)
-Resume file: .planning/phases/05-analysis-intelligence/05-01-SUMMARY.md
+Last session: 2026-01-19 (current)
+Stopped at: Completed 05-02 (Skill Coverage & Weighted Scoring)
+Resume file: .planning/phases/05-analysis-intelligence/05-02-SUMMARY.md
 Next action: Phase 06 - Integration Testing (verify analysis engine with end-to-end tests)
 Or: Phase 07 - Final Polish (documentation, edge cases, performance)
