@@ -1,0 +1,323 @@
+# Skills Dictionary for LLM-based Skill Extraction
+# Categories: Programming Languages, Frameworks, Databases, Cloud/DevOps, Tools, Methodologies
+
+# Programming Languages
+Go
+Golang
+Python
+Java
+JavaScript
+TypeScript
+Rust
+C++
+C#
+Ruby
+PHP
+Swift
+Kotlin
+Scala
+R
+Perl
+Lua
+Haskell
+Elixir
+Clojure
+
+# Frontend Frameworks
+React
+Vue
+Angular
+Svelte
+Next.js
+Nuxt.js
+Remix
+SolidJS
+Backbone
+Ember
+
+# Backend Frameworks
+Node.js
+Express
+NestJS
+FastAPI
+Flask
+Django
+Spring
+Spring Boot
+ASP.NET
+Rails
+Laravel
+Gin
+Echo
+Fiber
+Actix
+Rocket
+
+# Databases
+PostgreSQL
+Postgres
+MySQL
+MariaDB
+MongoDB
+Redis
+SQLite
+Cassandra
+Elasticsearch
+Opensearch
+ClickHouse
+DynamoDB
+CockroachDB
+Neo4j
+InfluxDB
+TimescaleDB
+RabbitMQ
+Kafka
+
+# Cloud Providers
+AWS
+Amazon Web Services
+GCP
+Google Cloud Platform
+Azure
+Microsoft Azure
+Oracle Cloud
+DigitalOcean
+Heroku
+Vercel
+Netlify
+Fly.io
+Render
+
+# Containerization & Orchestration
+Docker
+Kubernetes
+K8s
+Docker Compose
+Docker Swarm
+Helm
+Kustomize
+Minikube
+K3s
+K0s
+OpenShift
+Nomad
+
+# Infrastructure as Code
+Terraform
+CloudFormation
+Pulumi
+Ansible
+Chef
+Puppet
+SaltStack
+AWS CDK
+Crossplane
+
+# CI/CD Tools
+Jenkins
+GitLab CI
+GitHub Actions
+CircleCI
+Travis CI
+Azure DevOps
+TeamCity
+Bamboo
+ArgoCD
+Flux
+
+# Monitoring & Observability
+Prometheus
+Grafana
+Datadog
+New Relic
+Splunk
+ELK Stack
+OpenTelemetry
+Jaeger
+Zipkin
+Loki
+Tempo
+
+# Testing Frameworks
+Jest
+Mocha
+Jasmine
+Cypress
+Playwright
+Selenium
+Puppeteer
+Mockito
+JUnit
+pytest
+unittest
+TestNG
+Go testing
+
+# Development Tools
+Git
+GitHub
+GitLab
+Bitbucket
+Jira
+Confluence
+Slack
+VS Code
+IntelliJ
+Vim
+Neovim
+Emacs
+Docker Desktop
+Kubernetes Dashboard
+
+# Methodologies & Practices
+Agile
+Scrum
+Kanban
+Waterfall
+Lean
+XP
+TDD
+Test-Driven Development
+BDD
+Behavior-Driven Development
+DevOps
+SRE
+Site Reliability Engineering
+CI/CD
+Microservices
+Serverless
+FaaS
+REST
+GraphQL
+gRPC
+WebSocket
+OAuth
+OIDC
+JWT
+OAuth2
+OpenID Connect
+
+# Security Tools
+Vault
+Keycloak
+Auth0
+Okta
+AWS IAM
+OAuth Proxy
+CSP
+CORS
+SSL/TLS
+HTTPS
+
+# Performance & Caching
+Redis
+Memcached
+Varnish
+CDN
+Cloudflare
+Fastly
+NGINX
+HAProxy
+Envoy
+Istio
+Linkerd
+
+# Data Science & ML
+TensorFlow
+PyTorch
+Scikit-learn
+Pandas
+NumPy
+Jupyter
+Spark
+Hadoop
+Airflow
+MLflow
+Kubeflow
+
+# Mobile Development
+React Native
+Flutter
+SwiftUI
+Android
+iOS
+Kotlin Multiplatform
+
+# Desktop Development
+Electron
+Tauri
+Qt
+WPF
+WinForms
+Tkinter
+
+# Version Control Patterns
+Gitflow
+Trunk-Based Development
+Feature Branch
+Pull Request
+Code Review
+Merge Queue
+Rebase
+Cherry-pick
+
+# Build Tools
+Webpack
+Vite
+Rollup
+Parcel
+esbuild
+SWC
+Babel
+TSC
+Gradle
+Maven
+Make
+CMake
+Ninja
+
+# Package Managers
+npm
+Yarn
+pnpm
+Go modules
+pip
+Poetry
+NuGet
+Cargo
+Composer
+Bundler
+RubyGems
+
+# Search Engines
+Elasticsearch
+OpenSearch
+Solr
+MeiliSearch
+Typesense
+Algolia
+Sphinx
+
+# Message Queues
+RabbitMQ
+Kafka
+ActiveMQ
+SQS
+Pub/Sub
+Redis Streams
+NATS
+NSQ
+
+# Storage Solutions
+S3
+GCS
+Azure Blob
+MinIO
+Ceph
+GlusterFS
+NFS
+EFS
+
+# Note: This dictionary serves as a reference for LLM-based skill extraction
+# The LLM langextractor will identify skills from content and match against this list
+# Skills are normalized (case-insensitive matching) by the extraction logic
