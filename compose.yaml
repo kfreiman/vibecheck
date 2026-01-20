@@ -20,6 +20,23 @@ services:
       retries: 3
       start_period: 2s
 
+  langextract:
+    container_name: langextract
+    image: langextract/langextract:latest
+    networks:
+      main:
+    environment:
+      LANGEXTRACT_HOST: 0.0.0.0
+      LANGEXTRACT_PORT: 8000
+    volumes:
+      - langextract:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   vibecheck:
     container_name: vibecheck
     build:
@@ -32,6 +49,7 @@ services:
       VIBECHECK_STORAGE_PATH: ${VIBECHECK_STORAGE_PATH:-./storage}
       VIBECHECK_STORAGE_TTL: ${VIBECHECK_STORAGE_TTL:-24h}
       OLLAMA_HOST: ollama:11434
+      LANGEXTRACT_HOST: langextract:8000
     volumes:
       # Persistent storage for uploaded documents
       - storage:/app/storage
@@ -43,10 +61,18 @@ services:
       timeout: 5s
       retries: 3
       start_period: 2s
+    depends_on:
+      ollama:
+        condition: service_healthy
+        restart: true
+      langextract:
+        condition: service_healthy
+        restart: true
 
 volumes:
   storage:
   ollama:
+  langextract:
 
 networks:
   main:
