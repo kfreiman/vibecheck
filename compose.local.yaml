@@ -1,0 +1,29 @@
+services:
+  ollama:
+    container_name: ollama_local
+    image: ollama/ollama:latest
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  langextract:
+    container_name: langextract_local
+    image: langextract/langextract:latest
+    environment:
+      LANGEXTRACT_HOST: 0.0.0.0
+      LANGEXTRACT_PORT: 8000
+
+  vibecheck:
+    container_name: vibecheck_local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.local
+    environment:
+      OLLAMA_HOST: host.docker.internal:11434
+      LANGEXTRACT_HOST: host.docker.internal:8000
+    volumes:
+      - ~/.cache/ms-playwright:/ms-playwright
