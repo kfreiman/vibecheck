@@ -6,10 +6,11 @@ import (
 
 // Config holds the configuration for the MCP server
 type Config struct {
-	StoragePath string `env:"STORAGE_PATH" env-default:"./storage" env-description:"Storage directory path"`
-	StorageTTL  string `env:"STORAGE_TTL" env-default:"24h" env-description:"Default TTL for document cleanup (e.g., 24h, 1h30m)"`
-	Port        int    `env:"PORT" env-default:"8080" env-description:"HTTP server port"`
-	LogDebug    bool   `env:"DEBUG" env-default:"false" env-description:"Enable debug logging"`
+	StoragePath     string `env:"STORAGE_PATH" env-default:"./storage" env-description:"Storage directory path"`
+	StorageTTL      string `env:"STORAGE_TTL" env-default:"24h" env-description:"Default TTL for document cleanup (e.g., 24h, 1h30m)"`
+	Port            int    `env:"PORT" env-default:"8080" env-description:"HTTP server port"`
+	LogDebug        bool   `env:"DEBUG" env-default:"false" env-description:"Enable debug logging"`
+	LangExtractHost string `env:"LANGEXTRACT_HOST" env-default:"localhost:8000" env-description:"LangExtract service host and port"`
 }
 
 // LoadConfig loads configuration from environment variables
@@ -42,5 +43,11 @@ func (c Config) WithPort(port int) Config {
 // WithLogDebug enables or disables debug logging
 func (c Config) WithLogDebug(debug bool) Config {
 	c.LogDebug = debug
+	return c
+}
+
+// WithLangExtractHost sets the LangExtract service host
+func (c Config) WithLangExtractHost(host string) Config {
+	c.LangExtractHost = host
 	return c
 }
